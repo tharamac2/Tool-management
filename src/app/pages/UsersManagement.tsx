@@ -75,6 +75,7 @@ const UsersManagement = () => {
       if (!newUser.email) missingFields.push("Email");
       if (!newUser.password) missingFields.push("Password");
       if (!newUser.role) missingFields.push("Role");
+      if (!newUser.site) missingFields.push("Site Location");
 
       if (missingFields.length > 0) {
         toast.error(`Please fill in: ${missingFields.join(', ')}`);
@@ -221,13 +222,23 @@ const UsersManagement = () => {
     }
   };
 
-  const toggleUserStatus = (userId: string) => {
-    setUsers(users.map(u =>
-      u.id === userId
-        ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' }
-        : u
-    ));
-    toast.success('User status updated');
+  const toggleUserStatus = async (userId: string) => {
+    const userToToggle = users.find(u => u.id === userId);
+    if (!userToToggle) return;
+    
+    const newStatus = userToToggle.status === 'active' ? 'inactive' : 'active';
+    try {
+      await api.patch(`/users/${userId}`, { status: newStatus });
+      setUsers(users.map(u =>
+        u.id === userId
+          ? { ...u, status: newStatus }
+          : u
+      ));
+      toast.success('User status updated');
+    } catch (error) {
+      console.error("Failed to update user status", error);
+      toast.error('Failed to update user status');
+    }
   };
 
   const getRoleBadge = (role: string) => {
@@ -328,20 +339,19 @@ const UsersManagement = () => {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="inspector">Inspector</SelectItem>
                     <SelectItem value="store">Store Manager</SelectItem>
-                    <SelectItem value="worker">Worker</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="add-site">Site</Label>
+                <Label htmlFor="add-site">Site Location <span className="text-red-600">*</span></Label>
                 <Input
                   id="add-site"
                   placeholder="Enter site location"
                   value={newUser.site}
                   onChange={(e) => handleInputChange('site', e.target.value)}
+                  required
                 />
               </div>
             </div>

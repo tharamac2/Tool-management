@@ -74,7 +74,7 @@ def read_recent_inspections(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    # Join with Tool to get details
-    statement = select(Inspection).options(joinedload(Inspection.tool)).order_by(Inspection.date.desc()).offset(offset).limit(limit)
+    # Join with Tool and Inspector to get details
+    statement = select(Inspection).options(joinedload(Inspection.tool), joinedload(Inspection.inspector)).order_by(Inspection.date.desc()).offset(offset).limit(limit)
     inspections = session.exec(statement).all()
     return inspections

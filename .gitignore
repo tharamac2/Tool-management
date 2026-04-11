@@ -29,3 +29,12 @@ Thumbs.db
 
 # User Content
 uploads/
+
+# Ignore Logs
+*.log
+
+# Ignore Additional Venvironment
+.venv2/
+
+# Ignore Expo Cache
+.expo/

@@ -9,13 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Separator } from '../components/ui/separator';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Download, Printer, Save, Edit, Search, FileDown } from 'lucide-react';
+import { Download, Printer, Save, Edit, Search, FileDown, History, UploadCloud, X } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "../components/ui/hover-card";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog";
 import { toast } from 'sonner';
 import { DatePicker } from '../components/ui/date-picker';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -29,9 +31,81 @@ import {
 } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 
+const TOOLS_LIST = [
+  "Aerial Roller for Earthwire",
+  "Articulator Joints",
+  "Articulator Joints – 10T",
+  "Articulator Joints – 25T",
+  "Automatic Clamp for Earthwire – 7/3.66mm",
+  "Automatic Clamp for Zebra Conductor",
+  "Bull Dog Clamp – 18mm",
+  "Chain Pulley – 10T Capacity",
+  "Clipping Ladder",
+  "Comealong Clamp (Bolted) for Earthwire",
+  "Comealong Clamp (Bolted) for Zebra",
+  "Conductor Drum Lifting Jacks (Manual)",
+  "Conductor Drum Lifting Jacks (Manual) – 10T",
+  "Crowbar – 32mm",
+  "D-Shackles",
+  "D-Shackles – 5T Cap",
+  "D-Shackles – 6.5T Cap",
+  "D-Shackles – 8.5T Cap",
+  "D-Shackles – 9.5/10MT Cap",
+  "D-Shackles – 17MT Cap",
+  "Derrick Poles – 6m + 6m",
+  "Dieset for Earthwire",
+  "Dieset for Earthwire – Aluminium",
+  "Dieset for Earthwire – Steel",
+  "Dieset for Zebra Conductor – Aluminium",
+  "Double Ended Socks for Conductor",
+  "Double Sheave Pulley – 5T Cap",
+  "Double sleeve open Pulley",
+  "Dynamometer – 15T",
+  "Earthwire Socks",
+  "Equalizer Pulley",
+  "E/W Drum Lifting Jacks (Manual)",
+  "Four Sheave Pulley Block",
+  "Ground Rollers",
+  "Head Board Suitable for Seven Sheave Aerial Roller",
+  "Hydraulic Conductor Cutter",
+  "ISMC-400",
+  "Marking Roller",
+  "Midspan Joint Protector Sleeve",
+  "One End Open Socks with Eye for Conductor",
+  "Pilot Wire – 24mm",
+  "Pilot Wire – 24mm – 800m",
+  "Pilot Wire Bobbin",
+  "Pilot Wire Connector – 24mm",
+  "Pilot Wire Mounting Stand",
+  "Pilot Wire Safety Clamp",
+  "P.P. Rope – 22mm Dia",
+  "P.P. Rope – 22mm Dia – 220m",
+  "P.P. Rope – 24mm Dia",
+  "P.P. Rope – 24mm Dia – 220m",
+  "Sag Plate",
+  "Safety Clamp – 3 Bolted",
+  "Seven Sheave Aerial Roller – 660mm Dia Wheel (Nylon)",
+  "Single Sheave Pulley – 5T Cap",
+  "Single Sheave Pulley – 5T Cap – Open Type",
+  "Single Sheave Pulley – 5T Cap – Closed Type",
+  "Steel Wire Rope – 12mm (Fibre Coated)",
+  "Steel Wire Rope – 18mm (Fibre Coated)",
+  "Steel Wire Rope Slings – 18mm",
+  "Steel Wire Rope Slings – 18mm – 1m",
+  "Steel Wire Rope Slings – 18mm – 3m",
+  "Steel Wire Rope Slings – 18mm – 5m",
+  "Trifor – 5MT",
+  "Turn Buckles – 10T Cap",
+  "Turn Table E/W – 5 Ton Cap",
+  "Turn Table E/W – 10 Ton Cap",
+  "Walkie–Talkie",
+  "Winch Machine – 5T (With Mechanical Clamp)"
+];
+
 const ToolMaster = () => {
+  console.log("Rendering ToolMaster");
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState('new');
+  const [activeTab, setActiveTab] = useState(location.state?.view || 'new');
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
   const [savedTools, setSavedTools] = useState<any[]>([]);
 
@@ -93,6 +167,7 @@ const ToolMaster = () => {
     make: new Date().getFullYear().toString(),
     capacity: '',
     safeWorkingLoad: '',
+    toolType: 'Erection Tools', // Default
     purchaserName: '',
     purchaserContact: '',
     supplierCode: '',
@@ -118,8 +193,20 @@ const ToolMaster = () => {
   const [scanning, setScanning] = useState(false);
   const [isToolSaved, setIsToolSaved] = useState(false);
 
+  // History State
+  const [historyTool, setHistoryTool] = useState<any>(null); // The tool currently being viewed
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  
+  // Bulk Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [hoveredTool, setHoveredTool] = useState<any | null>(null);
 
   const filteredTools = savedTools.filter(tool => {
     const matchesSearch =
@@ -286,10 +373,31 @@ const ToolMaster = () => {
     }
   };
 
+  const generateCombinedQRUrl = (canvas: HTMLCanvasElement, text: string) => {
+    const newCanvas = document.createElement('canvas');
+    const ctx = newCanvas.getContext('2d');
+    if (!ctx) return canvas.toDataURL('image/png');
+    
+    newCanvas.width = canvas.width;
+    newCanvas.height = canvas.height + 40;
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+    
+    ctx.drawImage(canvas, 0, 0);
+    
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, newCanvas.width / 2, canvas.height + 20);
+    
+    return newCanvas.toDataURL('image/png');
+  };
+
   const downloadQR = () => {
     const canvas = document.querySelector('#qr-code-wrapper canvas') as HTMLCanvasElement;
     if (canvas) {
-      const pngUrl = canvas.toDataURL('image/png');
+      const pngUrl = generateCombinedQRUrl(canvas, qrCode);
       const downloadLink = document.createElement('a');
       downloadLink.href = pngUrl;
       downloadLink.download = `${qrCode || 'qrcode'}.png`;
@@ -305,7 +413,7 @@ const ToolMaster = () => {
   const printQR = () => {
     const canvas = document.querySelector('#qr-code-wrapper canvas') as HTMLCanvasElement;
     if (canvas) {
-      const pngUrl = canvas.toDataURL('image/png');
+      const pngUrl = generateCombinedQRUrl(canvas, qrCode);
       const printWindow = window.open('', '', 'width=600,height=600');
       if (printWindow) {
         printWindow.document.write(`
@@ -313,14 +421,12 @@ const ToolMaster = () => {
             <head>
               <title>Print QR Code</title>
               <style>
-                body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }
+                body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; margin: 0; }
                 img { max-width: 100%; height: auto; }
-                .label { margin-top: 20px; font-size: 20px; font-weight: bold; }
               </style>
             </head>
             <body>
               <img src="${pngUrl}" />
-              <div class="label">${qrCode}</div>
               <script>
                 window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 500); }
               </script>
@@ -367,6 +473,7 @@ const ToolMaster = () => {
         expiryDate: tool.expiry_date ? new Date(tool.expiry_date) : undefined,
         jobCode: tool.job_code || '',
         jobDescription: tool.job_description || '',
+        toolType: tool.tool_type || 'General',
       });
       setIsToolSaved(true);
       toast.success("Tool details loaded!");
@@ -433,6 +540,18 @@ const ToolMaster = () => {
     toast.info("Editing tool: " + tool.qr_code);
   };
 
+  const handleViewHistory = async (tool: any) => {
+    setHistoryTool(tool);
+    try {
+      const res = await api.get(`/movements/${tool.id}`);
+      setHistoryData(res.data);
+      setIsHistoryOpen(true);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load history");
+    }
+  };
+
   const handleNewTool = () => {
     setQrCode('');
     setIsToolSaved(false);
@@ -462,6 +581,35 @@ const ToolMaster = () => {
   };
 
 
+  const handleBulkUpload = async () => {
+    if (!importFile) {
+      toast.error("Please select an Excel or PDF file first.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", importFile);
+
+    setIsUploading(true);
+    try {
+      const response = await api.post("/upload/tools", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success(response.data.message || "Bulk import successful");
+      if (response.data.errors && response.data.errors.length > 0) {
+        toast.warning(`Some rows failed: ${response.data.errors[0]}...`);
+      }
+      setIsImportModalOpen(false);
+      setImportFile(null);
+      fetchTools(); // Refresh inventory
+      setActiveTab('saved'); // Switch to inventory to see new items
+    } catch (error: any) {
+      console.error("Bulk upload error", error);
+      toast.error(error.response?.data?.detail || "Bulk import failed. Please check file format.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -469,7 +617,51 @@ const ToolMaster = () => {
           <h1 className="text-3xl font-semibold text-[#0F172A]">Tool Master</h1>
           <p className="text-gray-500 mt-1">Manage tool inventory, generate QR codes, and track assets.</p>
         </div>
+        <Button onClick={() => setIsImportModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+          <UploadCloud className="mr-2 h-4 w-4" /> Bulk Import
+        </Button>
       </div>
+
+      {/* Bulk Import Modal */}
+      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Import Tools</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-gray-500">
+              Upload an Excel (.xlsx, .xls) or PDF file containing your tool details. The file must have a table with columns such as Description, Make, Capacity, SWL, etc.
+            </p>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center bg-gray-50">
+              <UploadCloud className="h-10 w-10 text-gray-400 mb-2" />
+              <Label htmlFor="bulk-file-upload" className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-500">
+                Click to browse
+                <Input
+                  id="bulk-file-upload"
+                  type="file"
+                  accept=".xlsx,.xls,.pdf"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                />
+              </Label>
+              {importFile && (
+                <p className="text-xs text-green-600 mt-2 flex items-center">
+                  <Badge variant="outline" className="bg-green-100 mr-2 border-green-200">Selected</Badge>
+                  {importFile.name}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportFile(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkUpload} disabled={!importFile || isUploading} className="bg-indigo-600 hover:bg-indigo-700">
+              {isUploading ? "Importing..." : "Start Import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
@@ -506,75 +698,76 @@ const ToolMaster = () => {
                 <CardHeader>
                   <CardTitle>Tool Details {editingToolId ? '(Editing)' : '(New)'}</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="description">Tool Name <span className="text-red-600">*</span></Label>
                     <Select value={toolData.description} onValueChange={(value) => handleInputChange('description', value)} required>
                       <SelectTrigger className={errors.description ? 'border-red-500' : ''}>
                         <SelectValue placeholder="Select tool Name" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="chain-hoist">Chain Hoist</SelectItem>
-                        <SelectItem value="wire-rope">Wire Rope Sling</SelectItem>
-                        <SelectItem value="hydraulic-jack">Hydraulic Jack</SelectItem>
-                        <SelectItem value="lifting-beam">Lifting Beam</SelectItem>
-                        <SelectItem value="shackle">Shackle</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="make">Make (Year) <span className="text-red-600">*</span></Label>
-                    <Select
-                      value={toolData.make}
-                      onValueChange={(value) => handleInputChange('make', value)}
-                    >
-                      <SelectTrigger id="make" className={errors.make ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Select year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 30 }, (_, i) => (new Date().getFullYear() - i).toString()).map((year) => (
-                          <SelectItem key={year} value={year}>
-                            {year}
-                          </SelectItem>
+                      <SelectContent className="max-h-[300px]">
+                        {TOOLS_LIST.map((tool) => (
+                          <SelectItem key={tool} value={tool}>{tool}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="capacity">Capacity <span className="text-red-600">*</span></Label>
-                    <Select
-                      value={toolData.capacity}
-                      onValueChange={(value) => handleInputChange('capacity', value)}
-                    >
-                      <SelectTrigger id="capacity" className={errors.capacity ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Select Capacity" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[200px]">
-                        {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
-                          <SelectItem key={num} value={`${num} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
-                            {num} {num === 1 ? 'Tonne' : 'Tonnes'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="swl">Safe Working Load (SWL) <span className="text-red-600">*</span></Label>
-                    <Select
-                      value={toolData.safeWorkingLoad}
-                      onValueChange={(value) => handleInputChange('safeWorkingLoad', value)}
-                    >
-                      <SelectTrigger id="swl" className={errors.safeWorkingLoad ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Select SWL" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[200px]">
-                        {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
-                          <SelectItem key={num} value={`${num} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
-                            {num} {num === 1 ? 'Tonne' : 'Tonnes'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="make">Make (Year) <span className="text-red-600">*</span></Label>
+                      <Select
+                        value={toolData.make}
+                        onValueChange={(value) => handleInputChange('make', value)}
+                      >
+                        <SelectTrigger id="make" className={errors.make ? 'border-red-500' : ''}>
+                          <SelectValue placeholder="Select year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 30 }, (_, i) => (new Date().getFullYear() - i).toString()).map((year) => (
+                            <SelectItem key={year} value={year}>
+                              {year}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="capacity">Capacity <span className="text-red-600">*</span></Label>
+                      <Select
+                        value={toolData.capacity}
+                        onValueChange={(value) => handleInputChange('capacity', value)}
+                      >
+                        <SelectTrigger id="capacity" className={errors.capacity ? 'border-red-500' : ''}>
+                          <SelectValue placeholder="Select Capacity" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px]">
+                          {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
+                            <SelectItem key={num} value={`${num} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
+                              {num} {num === 1 ? 'Tonne' : 'Tonnes'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="swl">Safe Working Load (SWL) <span className="text-red-600">*</span></Label>
+                      <Select
+                        value={toolData.safeWorkingLoad}
+                        onValueChange={(value) => handleInputChange('safeWorkingLoad', value)}
+                      >
+                        <SelectTrigger id="swl" className={errors.safeWorkingLoad ? 'border-red-500' : ''}>
+                          <SelectValue placeholder="Select SWL" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px]">
+                          {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
+                            <SelectItem key={num} value={`${num} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
+                              {num} {num === 1 ? 'Tonne' : 'Tonnes'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -847,84 +1040,12 @@ const ToolMaster = () => {
                   filteredTools.map((tool) => (
                     <TableRow key={tool.id} className="hover:bg-gray-50/50">
                       <TableCell className="font-medium text-[#1E3A8A]">
-                        <HoverCard>
-                          <HoverCardTrigger asChild>
-                            <span className="cursor-pointer underline decoration-dotted underline-offset-4 decoration-gray-400 hover:text-blue-700 hover:decoration-blue-700 transition-colors">
-                              {tool.description}
-                            </span>
-                          </HoverCardTrigger>
-                          <HoverCardContent className="w-96 p-4">
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="text-sm font-semibold text-[#1E3A8A] flex items-center gap-2">
-                                  {tool.description}
-                                  <Badge variant="outline" className="text-[10px] h-5">{tool.qr_code}</Badge>
-                                </h4>
-                                <p className="text-xs text-gray-500 mt-1">{tool.make} • {tool.capacity} • SWL {tool.safe_working_load}</p>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-3 text-xs border-t border-b py-3">
-                                <div>
-                                  <span className="text-gray-500 block">Supplier</span>
-                                  <span className="font-medium">{tool.purchaser_name || '-'}</span>
-                                  {tool.supplier_code && <span className="block text-gray-400 text-[10px]">Code: {tool.supplier_code}</span>}
-                                </div>
-                                <div>
-                                  <span className="text-gray-500 block">Date of Receipt</span>
-                                  <span className="font-medium">{tool.date_of_supply ? new Date(tool.date_of_supply).toLocaleDateString() : '-'}</span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500 block">Last Inspection</span>
-                                  <span className="font-medium">{tool.last_inspection_date ? new Date(tool.last_inspection_date).toLocaleDateString() : '-'}</span>
-                                  <span className={`block text-[10px] capitalize ${tool.inspection_result === 'usable' ? 'text-green-600' : 'text-red-500'}`}>
-                                    {tool.inspection_result}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500 block">Valid Until</span>
-                                  <span className="font-medium">{tool.expiry_date ? new Date(tool.expiry_date).toLocaleDateString() : '-'}</span>
-                                </div>
-                              </div>
-
-                              <div className="text-xs space-y-1">
-                                <p className="font-semibold text-gray-700">Site Movement History</p>
-                                <div className="grid grid-cols-3 gap-1 text-[10px] text-gray-500 text-center">
-                                  <div className="bg-gray-50 p-1 rounded">Prev: {tool.previous_site || '-'}</div>
-                                  <div className="bg-blue-50 text-blue-700 p-1 rounded font-medium">Curr: {tool.current_site || '-'}</div>
-                                  <div className="bg-gray-50 p-1 rounded">Next: {tool.next_site || '-'}</div>
-                                </div>
-                                {tool.subcontractor_name && (
-                                  <div className="mt-1 pt-1 border-t border-dashed">
-                                    <span className="text-gray-500">Sub-contractor: </span>
-                                    <span className="font-medium">{tool.subcontractor_name}</span>
-                                    {tool.subcontractor_code && <span className="text-gray-400"> ({tool.subcontractor_code})</span>}
-                                  </div>
-                                )}
-                              </div>
-
-                              {(tool.remarks || tool.test_certificate) && (
-                                <div className="pt-2 border-t text-xs space-y-2">
-                                  {tool.remarks && (
-                                    <div>
-                                      <span className="text-gray-500 font-semibold">Remarks: </span>
-                                      <span className="text-gray-700">{tool.remarks}</span>
-                                    </div>
-                                  )}
-                                  {tool.test_certificate && (
-                                    <a
-                                      href={`${baseUrl}${tool.test_certificate}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="flex items-center text-blue-600 hover:underline"
-                                    >
-                                      <FileDown className="w-3 h-3 mr-1" /> View Test Certificate
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </HoverCardContent>
-                        </HoverCard>
+                        <span
+                          className="cursor-pointer underline decoration-dotted underline-offset-4 decoration-gray-400 hover:text-blue-700 hover:decoration-blue-700 transition-colors"
+                          onMouseEnter={() => setHoveredTool(tool)}
+                        >
+                          {tool.description}
+                        </span>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{tool.qr_code}</TableCell>
                       <TableCell>{tool.make}</TableCell>
@@ -954,7 +1075,7 @@ const ToolMaster = () => {
                             const wrapper = document.getElementById(`qr-wrapper-list-${tool.id}`);
                             const canvas = wrapper?.querySelector('canvas');
                             if (canvas) {
-                              const pngUrl = canvas.toDataURL('image/png');
+                              const pngUrl = generateCombinedQRUrl(canvas, tool.qr_code);
                               const downloadLink = document.createElement('a');
                               downloadLink.href = pngUrl;
                               downloadLink.download = `QR-${tool.qr_code}.png`;
@@ -980,6 +1101,15 @@ const ToolMaster = () => {
                           >
                             <Edit className="h-4 w-4 text-gray-500 hover:text-blue-700" />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            title="View Movement History"
+                            onClick={() => handleViewHistory(tool)}
+                          >
+                            <History className="h-4 w-4 text-gray-500 hover:text-blue-700" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -996,7 +1126,176 @@ const ToolMaster = () => {
           </div>
         </TabsContent>
       </Tabs>
-    </div>
+
+      {/* History Dialog */}
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5 text-gray-500" />
+              Movement History: {historyTool?.description}
+              <Badge variant="outline">{historyTool?.qr_code}</Badge>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead>Remarks</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {historyData.length > 0 ? (
+                  historyData.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell className="text-xs text-gray-500">
+                        {new Date(record.timestamp).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-gray-700">{record.from_site || '-'}</TableCell>
+                      <TableCell className="font-semibold text-blue-700">{record.to_site || '-'}</TableCell>
+                      <TableCell className="text-sm text-gray-600">{record.remarks || '-'}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                      No movement history recorded yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Spotlight Overlay & Centered Card */}
+      {hoveredTool && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center isolate" onClick={() => setHoveredTool(null)}>
+          {/* Backdrop Blur */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" aria-hidden="true" />
+
+          {/* Centered Card */}
+          <div className="relative z-50 w-96 p-6 bg-white/95 shadow-2xl rounded-xl border border-white/20 animate-in zoom-in-95 duration-200">
+            <div className="space-y-4">
+              <div className="flex justify-between items-start gap-4">
+                <div>
+                  <h4 className="text-lg font-bold text-[#1E3A8A] flex items-center gap-2">
+                    {hoveredTool.description}
+                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">{hoveredTool.qr_code}</Badge>
+                  </h4>
+                  <p className="text-sm text-gray-500 mt-1">{hoveredTool.make} • {hoveredTool.capacity} • SWL {hoveredTool.safe_working_load}</p>
+                </div>
+                <div className="p-2 bg-white rounded-lg border shadow-sm shrink-0">
+                  <QRCodeCanvas
+                    value={`${baseUrl}/view-tool/${hoveredTool.qr_code}`}
+                    size={64}
+                    level={"H"}
+                    includeMargin={true}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm border-t border-b py-4">
+                <div>
+                  <span className="text-gray-500 block text-xs">Supplier</span>
+                  <span className="font-medium">{hoveredTool.purchaser_name || '-'}</span>
+                  {hoveredTool.supplier_code && <span className="block text-gray-400 text-[10px]">Code: {hoveredTool.supplier_code}</span>}
+                  {hoveredTool.purchaser_contact && <span className="block text-gray-400 text-[10px]">Contact: {hoveredTool.purchaser_contact}</span>}
+                </div>
+                <div>
+                  <span className="text-gray-500 block text-xs">Date of Receipt</span>
+                  <span className="font-medium">{hoveredTool.date_of_supply ? new Date(hoveredTool.date_of_supply).toLocaleDateString() : '-'}</span>
+                  {hoveredTool.validity_period && <span className="block text-gray-400 text-[10px]">Validity: {hoveredTool.validity_period} Years</span>}
+                </div>
+                <div>
+                  <span className="text-gray-500 block text-xs">Last Inspection</span>
+                  <span className="font-medium">{hoveredTool.last_inspection_date ? new Date(hoveredTool.last_inspection_date).toLocaleDateString() : '-'}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold capitalize ${hoveredTool.inspection_result === 'usable' ? 'text-green-600' : 'text-red-500'}`}>
+                      {hoveredTool.inspection_result}
+                    </span>
+                    {hoveredTool.usability_percentage && <span className="text-[10px] text-gray-500">({hoveredTool.usability_percentage}%)</span>}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-gray-500 block text-xs">Valid Until</span>
+                  <span className="font-medium">{hoveredTool.expiry_date ? new Date(hoveredTool.expiry_date).toLocaleDateString() : '-'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm border-b py-4">
+                <div>
+                  <span className="text-gray-500 block text-xs">Job Code</span>
+                  <span className="font-medium">{hoveredTool.job_code || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block text-xs">Job Description</span>
+                  <span className="font-medium truncate" title={hoveredTool.job_description}>{hoveredTool.job_description || '-'}</span>
+                </div>
+              </div>
+
+              {hoveredTool.debit_to && (
+                <div className="py-2 border-b bg-red-50 px-3 rounded mb-2">
+                  <span className="text-red-600 font-semibold block text-xs">Liability / Debit</span>
+                  <span className="text-sm font-bold text-red-800">{hoveredTool.debit_to}</span>
+                </div>
+              )}
+
+              <div className="text-sm space-y-2">
+                <p className="font-semibold text-gray-700">Site Movement History</p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-center">
+                  <div className="bg-gray-100 p-2 rounded">
+                    <span className="block text-gray-500 text-[10px] uppercase">Previous</span>
+                    {hoveredTool.previous_site || '-'}
+                  </div>
+                  <div className="bg-blue-50 text-blue-800 p-2 rounded ring-1 ring-blue-100">
+                    <span className="block text-blue-400 text-[10px] uppercase">Current</span>
+                    <span className="font-bold">{hoveredTool.current_site || '-'}</span>
+                  </div>
+                </div>
+                {hoveredTool.subcontractor_name && (
+                  <div className="mt-1 pt-1 border-t border-dashed text-xs">
+                    <span className="text-gray-500">Sub-contractor: </span>
+                    <span className="font-medium">{hoveredTool.subcontractor_name}</span>
+                    {hoveredTool.subcontractor_code && <span className="text-gray-400"> ({hoveredTool.subcontractor_code})</span>}
+                  </div>
+                )}
+              </div>
+
+              {(hoveredTool.remarks || hoveredTool.test_certificate) && (
+                <div className="pt-2 text-xs space-y-2 border-t mt-2">
+                  {hoveredTool.remarks && (
+                    <div>
+                      <span className="text-gray-500 font-semibold">Remarks: </span>
+                      <span className="text-gray-700">{hoveredTool.remarks}</span>
+                    </div>
+                  )}
+                  {hoveredTool.test_certificate && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-gray-500 font-semibold">Certificate: </span>
+                      <a
+                        href={`http://localhost:8000${hoveredTool.test_certificate}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Download PDF
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div >
   );
 };
 

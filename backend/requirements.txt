@@ -8,3 +8,7 @@ mysql-connector-python
 python-dotenv
 pymysql
 bcrypt==3.2.2
+reportlab
+pandas
+openpyxl
+pdfplumber

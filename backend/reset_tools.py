@@ -1,21 +1,26 @@
+
 from sqlmodel import Session, delete
-from .database import engine
-from .models import Tool, Inspection
+from backend.database import engine
+from backend.models import Tool, Inspection, MovementHistory, Alert
 
-def reset_tools():
+def reset_tools_data():
     with Session(engine) as session:
-        # Delete inspections first (child records)
-        statement_inspections = delete(Inspection)
-        result_inspections = session.exec(statement_inspections)
-        print(f"Deleted {result_inspections.rowcount} inspections.")
-
-        # Delete tools
-        statement_tools = delete(Tool)
-        result_tools = session.exec(statement_tools)
-        print(f"Deleted {result_tools.rowcount} tools.")
+        # Delete dependent data first
+        print("Deleting Inspections...")
+        session.exec(delete(Inspection))
+        
+        print("Deleting Movement History...")
+        session.exec(delete(MovementHistory))
+        
+        print("Deleting Alerts...")
+        session.exec(delete(Alert))
+        
+        # Delete Tools
+        print("Deleting Tools...")
+        session.exec(delete(Tool))
         
         session.commit()
-    print("All tools and inspections have been removed.")
+        print("All tool data has been reset successfully.")
 
 if __name__ == "__main__":
-    reset_tools()
+    reset_tools_data()

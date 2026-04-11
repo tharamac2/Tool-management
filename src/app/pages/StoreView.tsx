@@ -1,36 +1,100 @@
-import { useState, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { QrCode, Calendar, MapPin, Save, RefreshCw, Wrench } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
+import {
+  QrCode,
+  MapPin,
+  Save,
+  Wrench,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  AlertTriangle,
+  User,
+  Truck,
+  Store
+} from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 import api from '../services/api';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
+import jsPDF from 'jspdf';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../components/ui/table';
 
 const StoreView = () => {
+  const [storeLocation, setStoreLocation] = useState<string>('Store');
+  const [inventoryTools, setInventoryTools] = useState<any[]>([]);
+
   const [scannedTool, setScannedTool] = useState<any>(null);
   const [scanning, setScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Site Movement State
-  const [movementData, setMovementData] = useState({
+  // Transaction State
+  const [transactionType, setTransactionType] = useState<'in' | 'out'>('in');
+  const [inSubCategory, setInSubCategory] = useState('subcon_return'); // subcon_return, new_product, site_receive
+  const [outSubCategory, setOutSubCategory] = useState('subcon_work'); // subcon_work, site_transfer
+
+  // Incident State
+  const [isIncidentMode, setIsIncidentMode] = useState(false);
+  const [incidentDebitTo, setIncidentDebitTo] = useState('');
+
+  // Form Data
+  const [formData, setFormData] = useState({
     subcontractorName: '',
     subcontractorCode: '',
-    previousSite: '',
-    currentSite: '',
-    nextSite: '',
+    targetSite: '', // Current Site updates to "Store" on In, or specific site on Out
     remarks: ''
   });
+
+  // Last Transaction
+  const [lastTransaction, setLastTransaction] = useState<any>(null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'usable': return 'bg-[#16A34A] text-white';
       case 'scrap': return 'bg-red-100 text-red-700';
+      case 'missing': return 'bg-orange-100 text-orange-700';
+      case 'stolen': return 'bg-red-900 text-white';
+      case 'scrapped': return 'bg-neutral-800 text-white';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
+  useEffect(() => {
+    const fetchUserAndInventory = async () => {
+      try {
+        const userRes = await api.get('/users/me');
+        const site = userRes.data.site;
+        if (site) {
+          setStoreLocation(site);
+          const toolsRes = await api.get(`/tools/?site=${site}&limit=1000`);
+          setInventoryTools(toolsRes.data);
+        } else {
+          setStoreLocation('Store');
+        }
+      } catch (err) {
+        console.error("Failed to fetch user site or inventory", err);
+      }
+    };
+    fetchUserAndInventory();
+  }, [lastTransaction]);
 
   const triggerScan = () => {
     fileInputRef.current?.click();
@@ -63,17 +127,25 @@ const StoreView = () => {
   const fetchToolDetails = async (code: string) => {
     try {
       toast.info(`Fetching tool: ${code}`);
+      setLastTransaction(null); // Clear previous transaction summary
       const res = await api.get(`/tools/qr/${code}`);
       setScannedTool(res.data);
-      // Initialize movement data from fetched tool
-      setMovementData({
+
+      // Auto-fill form based on current tool state
+      setFormData({
         subcontractorName: res.data.subcontractor_name || '',
         subcontractorCode: res.data.subcontractor_code || '',
-        previousSite: res.data.previous_site || '',
-        currentSite: res.data.current_site || '',
-        nextSite: res.data.next_site || '',
-        remarks: res.data.remarks || ''
+        targetSite: '',
+        remarks: ''
       });
+
+      // Auto-fill Incident Debit if subcon assigned
+      if (res.data.subcontractor_name) {
+        setIncidentDebitTo(res.data.subcontractor_name);
+      } else {
+        setIncidentDebitTo('');
+      }
+
       toast.success("Tool details loaded");
     } catch (error) {
       console.error(error);
@@ -81,97 +153,316 @@ const StoreView = () => {
     }
   };
 
-  const handleUpdateMovement = async () => {
-    if (!scannedTool) return;
+
+
+  const generatePDF = (tool: any, transactionDetails: any, remarks: string, type: 'RECEIPT' | 'DISPATCH' = 'RECEIPT') => {
     try {
-      const payload = {
-        subcontractor_name: movementData.subcontractorName,
-        subcontractor_code: movementData.subcontractorCode,
-        previous_site: movementData.previousSite,
-        current_site: movementData.currentSite,
-        next_site: movementData.nextSite,
-        remarks: movementData.remarks
-      };
+      const doc = new jsPDF();
 
-      await api.patch(`/tools/${scannedTool.id}`, payload);
-      toast.success("Site movement updated successfully");
+      // --- Header ---
+      doc.setFontSize(22);
+      doc.setTextColor(30, 58, 138); // #1E3A8A Blue
+      // "Inward Delivery Challan" for Receipt, "Outward Delivery Challan" for Dispatch
+      const title = type === 'RECEIPT' ? "Inward Delivery Challan" : "Outward Delivery Challan";
+      doc.text(title, 105, 20, { align: "center" });
 
-      // Refresh data
-      const res = await api.get(`/tools/${scannedTool.id}`);
-      setScannedTool(res.data);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to update site movement");
+      // --- Meta Info ---
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 105, 30, { align: "center" });
+      doc.text(`Transaction ID: ${Date.now()}`, 105, 35, { align: "center" });
+
+      doc.setLineWidth(0.5);
+      doc.line(15, 40, 195, 40);
+
+      // --- Tool Details Box ---
+      // Box: x=15, y=45, w=180, h=45
+      doc.setDrawColor(200); // Light Gray Border
+      doc.setFillColor(250); // Very Light Gray BG
+      doc.rect(15, 45, 180, 45, 'FD'); // Fill and Draw
+
+      doc.setFontSize(14);
+      doc.setTextColor(0);
+      doc.text("Tool Details", 20, 55);
+
+      doc.setFontSize(11);
+      doc.setTextColor(50);
+      doc.text(`Description:`, 20, 65); doc.text(tool.description, 60, 65);
+      doc.text(`QR Code:`, 20, 72); doc.text(tool.qr_code, 60, 72);
+      doc.text(`Make:`, 20, 79); doc.text(tool.make, 60, 79);
+      doc.text(`Capacity:`, 20, 86); doc.text(`${tool.capacity} (SWL: ${tool.safe_working_load})`, 60, 86);
+
+      // --- Transaction Details Box ---
+      // Box: x=15, y=95, w=180, h=55
+      doc.setDrawColor(200);
+      doc.setFillColor(255); // White BG
+      doc.rect(15, 95, 180, 55, 'S'); // Stroke only
+
+      doc.setFontSize(14);
+      doc.setTextColor(0);
+      doc.text("Transaction Details", 20, 105);
+
+      doc.setFontSize(11);
+      doc.setTextColor(50);
+      doc.text(`Type:`, 20, 115); doc.text(type === 'RECEIPT' ? "Receipt (Inward)" : "Dispatch (Outward)", 60, 115);
+      doc.text(`Category:`, 20, 122); doc.text(transactionDetails.replace('_', ' ').toUpperCase(), 60, 122);
+
+      if (type === 'RECEIPT') {
+        if (transactionDetails === 'subcon_return' && tool.subcontractor_name) {
+          doc.text(`Returned By:`, 20, 129); doc.text(tool.subcontractor_name, 60, 129);
+        } else {
+          doc.text(`Source:`, 20, 129); doc.text("External / Site", 60, 129);
+        }
+        doc.text(`Destination:`, 20, 136); doc.text(storeLocation, 60, 136);
+      } else {
+        // DISPATCH
+        if (transactionDetails === 'subcon_work' && tool.subcontractor_name) {
+          doc.text(`Issued To:`, 20, 129); doc.text(tool.subcontractor_name || 'Sub-Contractor', 60, 129);
+        } else {
+          doc.text(`Destination:`, 20, 129); doc.text("Site Transfer", 60, 129);
+        }
+        doc.text(`Source:`, 20, 136); doc.text(storeLocation, 60, 136);
+      }
+
+      doc.text(`Remarks:`, 20, 143); doc.text(remarks || '-', 60, 143, { maxWidth: 120 });
+
+      // --- Footer ---
+      doc.setLineWidth(0.5);
+      doc.setDrawColor(0); // Black line
+      doc.line(20, 250, 190, 250);
+
+      doc.setFontSize(10);
+      doc.text("Authorized Signature", 150, 270, { align: "center" });
+      doc.line(130, 265, 170, 265);
+
+      // Save
+      const filename = `${type === 'RECEIPT' ? 'Inward' : 'Outward'}_Challan_${tool.qr_code}_${Date.now()}.pdf`;
+      doc.save(filename);
+      toast.success(`${type === 'RECEIPT' ? 'Inward' : 'Outward'} Challan Downloaded`);
+    } catch (pdfError) {
+      console.error("PDF Generation failed", pdfError);
+      toast.error("Failed to generate PDF");
     }
   };
 
+
+  const handleSubmit = async () => {
+    if (!scannedTool) return;
+
+    try {
+      let payload: any = {};
+
+      if (isIncidentMode) {
+        // Incident Logic handled separately
+        return;
+      }
+
+      if (transactionType === 'in') {
+        // RECEIPT LOGIC
+        // Default location is the selected Store, unless specified otherwise (e.g. Receive from site might imply it's NOW at Store)
+        payload.current_site = storeLocation;
+
+        if (inSubCategory === 'subcon_return') {
+          payload.subcontractor_name = null; // Clear subcon
+          payload.subcontractor_code = null;
+          payload.remarks = `Returned from Sub-Contractor. ${formData.remarks}`;
+        } else if (inSubCategory === 'new_product') {
+          payload.remarks = `New Product Received. ${formData.remarks}`;
+        } else if (inSubCategory === 'site_receive') {
+          payload.remarks = `Received from Site ${scannedTool.current_site}. ${formData.remarks}`;
+        } else if (inSubCategory === 'found_recovered') {
+          payload.status = 'usable'; // Reset status
+          payload.debit_to = null; // Clear liability
+          payload.subcontractor_name = null;
+          payload.subcontractor_code = null;
+          payload.remarks = `Tool Found/Recovered. Previous status: ${scannedTool.status}. ${formData.remarks}`;
+        }
+      } else {
+        // DISPATCH LOGIC
+        if (outSubCategory === 'subcon_work') {
+          payload.current_site = formData.targetSite || scannedTool.current_site; // Optional update site
+          payload.subcontractor_name = formData.subcontractorName;
+          payload.subcontractor_code = formData.subcontractorCode;
+          payload.remarks = `Issued to Sub-Contractor. ${formData.remarks}`;
+        } else if (outSubCategory === 'site_transfer') {
+          payload.current_site = formData.targetSite;
+          payload.subcontractor_name = null; // Clear subcon if moving site to site? Depends on workflow. Assuming clear.
+          payload.subcontractor_code = null;
+          payload.remarks = `Transferred to Site: ${formData.targetSite}. ${formData.remarks}`;
+        } else if (outSubCategory === 'scrap_disposal') {
+          payload.status = 'scrapped';
+          payload.current_site = 'Scrap Yard';
+          payload.subcontractor_name = formData.subcontractorName; // Reusing for Scrap Dealer Name
+          payload.subcontractor_code = formData.subcontractorCode; // Reusing for Scrap Dealer Code
+          payload.debit_to = null;
+          payload.remarks = `Sent to Scrap Dealer: ${formData.subcontractorName} (${formData.subcontractorCode}). ${formData.remarks}`;
+        }
+      }
+
+      // Common Fields
+      payload.previous_site = scannedTool.current_site;
+
+      await api.patch(`/tools/${scannedTool.id}`, payload);
+      setLastTransaction({
+        type: transactionType === 'in' ? 'RECEIPT' : 'DISPATCH',
+        details: transactionType === 'in' ? inSubCategory : outSubCategory,
+        remarks: payload.remarks,
+        timestamp: new Date().toLocaleString()
+      });
+      toast.success("Transaction recorded successfully");
+
+      // Generate PDF for both Receipt and Dispatch
+      setTimeout(() => {
+        generatePDF(
+          { ...scannedTool, ...payload },
+          transactionType === 'in' ? inSubCategory : outSubCategory,
+          payload.remarks,
+          transactionType === 'in' ? 'RECEIPT' : 'DISPATCH'
+        );
+      }, 500);
+
+      refreshTool();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to update tool");
+    }
+  };
+
+  const handleIncidentReport = async (type: 'missing' | 'stolen') => {
+    if (!scannedTool) return;
+    try {
+      const payload = {
+        status: type,
+        debit_to: incidentDebitTo,
+        remarks: `Reported ${type.toUpperCase()}. Debit to: ${incidentDebitTo || 'None'}.`
+      };
+      await api.patch(`/tools/${scannedTool.id}`, payload);
+      toast.success(`Tool marked as ${type}`);
+      refreshTool();
+      setIsIncidentMode(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to report incident");
+    }
+  };
+
+  const refreshTool = async () => {
+    if (scannedTool) {
+      const res = await api.get(`/tools/${scannedTool.id}`);
+      setScannedTool(res.data);
+    }
+  }
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-semibold text-[#0F172A]">Store In-Charge View</h1>
-        <p className="text-gray-500 mt-1">Scan QR code to view tool info and update site movement</p>
+    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold text-[#0F172A]">Store Operations</h1>
+          <p className="text-gray-500 mt-1">Receipts, Dispatches, and Incident Reporting</p>
+        </div>
+
       </div>
 
-      {/* QR Scanner Section */}
+      {/* Inventory List */}
+      {storeLocation && (
+        <Card className="animate-in fade-in slide-in-from-top-4 duration-500 mb-6 mt-6">
+          <CardHeader className="bg-gray-50 pb-2 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <MapPin className="text-[#1E3A8A] w-5 h-5"/>
+                {storeLocation} Inventory
+              </CardTitle>
+              <CardDescription>
+                Tools actively stationed at {storeLocation}
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200 shadow-sm text-sm py-1 px-3">
+              {inventoryTools.length} {inventoryTools.length === 1 ? 'Item' : 'Items'}
+            </Badge>
+          </CardHeader>
+          <CardContent className="p-0">
+            {inventoryTools.length > 0 ? (
+              <div className="max-h-[300px] overflow-auto">
+                <Table>
+                  <TableHeader className="bg-white sticky top-0 border-b border-gray-100 z-10 shadow-sm">
+                    <TableRow>
+                      <TableHead>Description</TableHead>
+                      <TableHead>QR / Tracking</TableHead>
+                      <TableHead>Make & Capacity</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {inventoryTools.map((tool) => (
+                      <TableRow key={tool.id} className="hover:bg-blue-50/20 cursor-pointer" onClick={() => fetchToolDetails(tool.qr_code)}>
+                        <TableCell className="font-medium text-[#1E3A8A]">{tool.description}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] text-gray-500">{tool.qr_code}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                           {tool.make} <span className="text-xs text-gray-400 block">{tool.capacity}</span>
+                        </TableCell>
+                        <TableCell>
+                           <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase whitespace-nowrap ${getStatusColor(tool.status)}`}>
+                             {tool.status}
+                           </span>
+                           {tool.subcontractor_name && (
+                             <span className="block text-[10px] text-gray-400 mt-0.5 truncate max-w-[120px]" title={tool.subcontractor_name}>
+                               held by: {tool.subcontractor_name}
+                             </span>
+                           )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-400 flex flex-col items-center">
+                <Store className="w-12 h-12 text-gray-200 mb-2"/>
+                <p>This location has no tools currently registered.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* QR Scanner */}
       <Card>
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center space-y-6">
-            <div id="reader-hidden-store" className="hidden"></div>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-
-            <div className={`w-48 h-48 border-4 border-dashed rounded-lg flex items-center justify-center ${scanning ? 'border-[#1E3A8A] animate-pulse' : 'border-gray-300'}`}>
-              <QrCode className="w-16 h-16 text-gray-400" />
-            </div>
-
-            <Button
-              size="lg"
-              className="bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 gap-2"
-              onClick={triggerScan}
-              disabled={scanning}
-            >
-              <QrCode className="w-5 h-5" />
-              {scanning ? 'Scanning...' : 'Scan / Upload QR'}
-            </Button>
-
-            {/* Dev Helper: Manual ID input for testing if no camera */}
-            <div className="flex gap-2 items-center">
-              <Input
-                placeholder="Enter QR manually"
-                className="w-40 h-8 text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    fetchToolDetails(e.currentTarget.value);
-                    e.currentTarget.value = '';
-                  }
-                }}
-              />
-            </div>
-          </div>
+        <CardContent className="py-6 flex flex-col items-center gap-4">
+          <div id="reader-hidden-store" className="hidden"></div>
+          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+          <Button size="lg" className="bg-[#1E3A8A] w-full md:w-auto" onClick={triggerScan} disabled={scanning}>
+            <QrCode className="w-5 h-5 mr-2" />
+            {scanning ? 'Scanning...' : 'Scan / Upload QR'}
+          </Button>
+          {/* Dev Manual Input */}
+          <Input placeholder="Manual QR Entry" className="w-40 h-8 text-sm" onKeyDown={(e) => { if (e.key === 'Enter') { fetchToolDetails(e.currentTarget.value); e.currentTarget.value = ''; } }} />
         </CardContent>
       </Card>
 
-      {/* Tool Summary Card */}
       {scannedTool && (
-        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-          <Card className="border-2 border-[#1E3A8A] overflow-hidden">
-            <CardHeader className={`${getStatusColor(scannedTool.status)} text-white py-4`}>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Wrench className="w-5 h-5" />
-                  {scannedTool.description}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-white/20 hover:bg-white/30 text-white border-0 backdrop-blur-sm">
-                    {scannedTool.qr_code}
-                  </Badge>
+        <div className="space-y-6">
+          {/* Tool Details Header */}
+          <Card className="border-l-4 border-l-[#1E3A8A] overflow-hidden">
+            <CardHeader className="bg-gray-50 pb-2">
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    {scannedTool.description}
+                    <Badge variant="outline">{scannedTool.qr_code}</Badge>
+                  </CardTitle>
+                  <CardDescription className='mt-1'>
+                    Current Site: <strong>{scannedTool.current_site || 'N/A'}</strong> |
+                    Status: <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase ${getStatusColor(scannedTool.status)}`}>{scannedTool.status}</span>
+                  </CardDescription>
                 </div>
+                {scannedTool.subcontractor_name && (
+                  <Badge variant="secondary" className="flex flex-col items-end gap-1 px-3 py-1">
+                    <span className="text-[10px] text-gray-500 uppercase">Held By</span>
+                    <span className="font-semibold">{scannedTool.subcontractor_name}</span>
+                  </Badge>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
@@ -219,86 +510,259 @@ const StoreView = () => {
                   <p className="font-semibold text-gray-900">{scannedTool.job_description || '-'}</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Site Movement Card */}
-          <Card>
-            <CardHeader className="bg-gray-50 border-b border-gray-100">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MapPin className="w-5 h-5 text-[#1E3A8A]" />
-                Site Movement Tracking
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="subcontractor">Subcontractor Name</Label>
-                  <Input
-                    id="subcontractor"
-                    placeholder="Enter subcontractor name"
-                    value={movementData.subcontractorName}
-                    onChange={(e) => setMovementData({ ...movementData, subcontractorName: e.target.value })}
-                  />
+              {/* Movement History */}
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Movement History</p>
+                <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100">
+                  <div className="flex items-center justify-center gap-8 text-sm">
+                    <div className="text-center">
+                      <span className="text-xs text-gray-500 block">Previous Site</span>
+                      <span className="font-semibold text-gray-700">{scannedTool.previous_site || '-'}</span>
+                    </div>
+                    <div className="text-blue-300">
+                      <Truck className="w-5 h-5" />
+                    </div>
+                    <div className="text-center">
+                      <span className="text-xs text-gray-500 block">Current Site</span>
+                      <span className="font-semibold text-blue-700">{scannedTool.current_site || storeLocation}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subcontractorCode">Sub-contractor Code</Label>
-                  <Input
-                    id="subcontractorCode"
-                    placeholder="Enter code"
-                    value={movementData.subcontractorCode}
-                    onChange={(e) => setMovementData({ ...movementData, subcontractorCode: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currentSite">Current Site</Label>
-                  <Input
-                    id="currentSite"
-                    placeholder="Enter current site"
-                    value={movementData.currentSite}
-                    onChange={(e) => setMovementData({ ...movementData, currentSite: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nextSite">Next Site</Label>
-                  <Input
-                    id="nextSite"
-                    placeholder="Enter next site"
-                    value={movementData.nextSite}
-                    onChange={(e) => setMovementData({ ...movementData, nextSite: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="remarks">Remarks</Label>
-                  <Input
-                    id="remarks"
-                    placeholder="Enter process remarks"
-                    value={movementData.remarks}
-                    onChange={(e) => setMovementData({ ...movementData, remarks: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="previousSite" className="text-gray-400">Previous Site (Read Only)</Label>
-                  <Input
-                    id="previousSite"
-                    value={movementData.previousSite}
-                    disabled
-                    className="bg-gray-50 text-gray-500"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-8 flex justify-end">
-                <Button onClick={handleUpdateMovement} className="bg-[#1E3A8A] hover:bg-[#1E3A8A]/90">
-                  <Save className="w-4 h-4 mr-2" />
-                  Update Movement
-                </Button>
               </div>
             </CardContent>
           </Card>
+
+          {/* Operations Area */}
+          <Tabs defaultValue="transactions" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="transactions" onClick={() => setIsIncidentMode(false)}>Standard Operations</TabsTrigger>
+              <TabsTrigger value="incidents" onClick={() => setIsIncidentMode(true)} className="data-[state=active]:bg-red-50 data-[state=active]:text-red-700">Incident Reporting</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="transactions" className="space-y-4 mt-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant={transactionType === 'in' ? 'default' : 'outline'}
+                      className={`flex-1 gap-2 ${transactionType === 'in' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                      onClick={() => setTransactionType('in')}
+                    >
+                      <ArrowDownCircle className="w-4 h-4" /> Receipt (IN)
+                    </Button>
+                    <Button
+                      variant={transactionType === 'out' ? 'default' : 'outline'}
+                      className={`flex-1 gap-2 ${transactionType === 'out' ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                      onClick={() => setTransactionType('out')}
+                    >
+                      <ArrowUpCircle className="w-4 h-4" /> Dispatch (OUT)
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {transactionType === 'in' && (
+                    <div className="space-y-4 animate-in slide-in-from-left-2">
+                      <Label>Receipt Type</Label>
+                      <RadioGroup value={inSubCategory} onValueChange={setInSubCategory} className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div className="flex items-center space-x-2 border p-3 rounded-md cursor-pointer hover:bg-gray-50">
+                          <RadioGroupItem value="subcon_return" id="r1" />
+                          <Label htmlFor="r1" className="cursor-pointer">Sub-Contractor Return</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 border p-3 rounded-md cursor-pointer hover:bg-gray-50">
+                          <RadioGroupItem value="new_product" id="r2" />
+                          <Label htmlFor="r2" className="cursor-pointer">New Product Supply</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 border p-3 rounded-md cursor-pointer hover:bg-gray-50">
+                          <RadioGroupItem value="site_receive" id="r3" />
+                          <Label htmlFor="r3" className="cursor-pointer">From Other Site</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 border p-3 rounded-md cursor-pointer hover:bg-gray-50 border-green-200 bg-green-50/50">
+                          <RadioGroupItem value="found_recovered" id="r4" />
+                          <Label htmlFor="r4" className="cursor-pointer text-green-800 font-medium">Found / Recovered</Label>
+                        </div>
+                      </RadioGroup>
+
+                      {/* Conditional Info */}
+                      {inSubCategory === 'subcon_return' && (
+                        <div className="bg-orange-50 p-3 rounded text-sm text-orange-800 border border-orange-200">
+                          <strong>Action:</strong> Tool will be marked as returned to Store. Sub-contractor assignment will be cleared.
+                        </div>
+                      )}
+                      {inSubCategory === 'found_recovered' && (
+                        <div className="bg-green-50 p-3 rounded text-sm text-green-800 border border-green-200">
+                          <strong>Action:</strong> Tool status will be reset to <b>Usable</b>. Liability (Debit To) will be cleared. Tool returned to Store.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {transactionType === 'out' && (
+                    <div className="space-y-4 animate-in slide-in-from-right-2">
+                      <Label>Dispatch Type</Label>
+                      <RadioGroup value={outSubCategory} onValueChange={setOutSubCategory} className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div className={`flex items-center space-x-2 border p-3 rounded-md cursor-pointer ${scannedTool.status === 'scrap' || scannedTool.status === 'scrapped' ? 'opacity-50 bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
+                          <RadioGroupItem value="subcon_work" id="d1" disabled={scannedTool.status === 'scrap' || scannedTool.status === 'scrapped'} />
+                          <Label htmlFor="d1" className={`cursor-pointer ${scannedTool.status === 'scrap' || scannedTool.status === 'scrapped' ? 'cursor-not-allowed text-gray-400' : ''}`}>Issue to Sub-Contractor</Label>
+                        </div>
+                        <div className={`flex items-center space-x-2 border p-3 rounded-md cursor-pointer ${scannedTool.status === 'scrap' || scannedTool.status === 'scrapped' ? 'opacity-50 bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
+                          <RadioGroupItem value="site_transfer" id="d2" disabled={scannedTool.status === 'scrap' || scannedTool.status === 'scrapped'} />
+                          <Label htmlFor="d2" className={`cursor-pointer ${scannedTool.status === 'scrap' || scannedTool.status === 'scrapped' ? 'cursor-not-allowed text-gray-400' : ''}`}>Transfer to Next Site</Label>
+                        </div>
+                        <div className={`flex items-center space-x-2 border p-3 rounded-md cursor-pointer ${scannedTool.status !== 'scrap' && scannedTool.status !== 'scrapped' ? 'opacity-50 bg-gray-100 cursor-not-allowed' : 'hover:bg-red-50 border-red-200'}`}>
+                          <RadioGroupItem value="scrap_disposal" id="d3" disabled={scannedTool.status !== 'scrap' && scannedTool.status !== 'scrapped'} />
+                          <Label htmlFor="d3" className={`cursor-pointer ${scannedTool.status !== 'scrap' && scannedTool.status !== 'scrapped' ? 'cursor-not-allowed text-gray-400' : 'text-red-700'}`}>Issue to Scrap Dealer</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                    {/* Fields dynamic based on selection */}
+                    {(transactionType === 'out' && outSubCategory === 'subcon_work') && (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Sub-Contractor Name</Label>
+                          <Input
+                            placeholder="Name"
+                            value={formData.subcontractorName}
+                            onChange={(e) => setFormData({ ...formData, subcontractorName: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Sub-Contractor Code</Label>
+                          <Input
+                            placeholder="Code"
+                            value={formData.subcontractorCode}
+                            onChange={(e) => setFormData({ ...formData, subcontractorCode: e.target.value })}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {(transactionType === 'out' && outSubCategory === 'scrap_disposal') && (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Scrap Dealer Name</Label>
+                          <Input
+                            placeholder="Dealer Name"
+                            value={formData.subcontractorName}
+                            onChange={(e) => setFormData({ ...formData, subcontractorName: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Scrap Dealer Code</Label>
+                          <Input
+                            placeholder="Dealer Code"
+                            value={formData.subcontractorCode}
+                            onChange={(e) => setFormData({ ...formData, subcontractorCode: e.target.value })}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {(transactionType === 'out' || inSubCategory === 'site_receive') && (
+                      <div className="space-y-2">
+                        <Label>{transactionType === 'out' ? 'Destination Site' : 'Origin Site (Optional)'}</Label>
+                        <Input
+                          placeholder="Site Name"
+                          value={formData.targetSite}
+                          onChange={(e) => setFormData({ ...formData, targetSite: e.target.value })}
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Remarks</Label>
+                      <Input
+                        placeholder="Enter additional details..."
+                        value={formData.remarks}
+                        onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <Button className="w-full bg-[#1E3A8A]" onClick={handleSubmit}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Confirm {transactionType === 'in' ? 'Receipt' : 'Dispatch'}
+                  </Button>
+
+                  {lastTransaction && (
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold text-green-800 flex items-center gap-2">
+                            <Truck className="w-4 h-4" />
+                            Transaction Recorded Successfully
+                          </h3>
+                          <div className="mt-2 text-sm text-green-700 space-y-1">
+                            <p><span className="font-medium">Type:</span> {lastTransaction.type}</p>
+                            <p><span className="font-medium">Category:</span> {lastTransaction.details.replace('_', ' ').toUpperCase()}</p>
+                            <p><span className="font-medium">Remarks:</span> {lastTransaction.remarks}</p>
+                            <p><span className="font-medium">Time:</span> {lastTransaction.timestamp}</p>
+                          </div>
+                        </div>
+                        {lastTransaction && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-white border-green-200 text-green-700 hover:bg-green-100"
+                            onClick={() => generatePDF(scannedTool, lastTransaction.details, lastTransaction.remarks, lastTransaction.type)}
+                          >
+                            <ArrowDownCircle className="w-4 h-4 mr-2" />
+                            Download {lastTransaction.type === 'RECEIPT' ? 'Receipt' : 'Dispatch'} Note
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="incidents" className="mt-4">
+              <Card className="border-red-200">
+                <CardHeader className="bg-red-50">
+                  <CardTitle className="text-red-800 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" />
+                    Report Incident
+                  </CardTitle>
+                  <CardDescription>
+                    Mark tool as Missing or Stolen and calculate liability.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 pt-6">
+                  <div className="space-y-2">
+                    <Label>Debit To (Sub-Contractor / Entity)</Label>
+                    <div className="flex gap-2">
+                      <User className="w-5 h-5 text-gray-400 mt-2" />
+                      <Input
+                        placeholder="Who is liable?"
+                        value={incidentDebitTo}
+                        onChange={(e) => setIncidentDebitTo(e.target.value)}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      This entity will be held liable for the cost of the tool.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <Button variant="outline" className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50" onClick={() => handleIncidentReport('missing')}>
+                      Mark as MISSING
+                    </Button>
+                    <Button variant="destructive" className="flex-1" onClick={() => handleIncidentReport('stolen')}>
+                      Mark as STOLEN
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 };
 

@@ -26,6 +26,7 @@ class UserUpdate(SQLModel):
     site: Optional[str] = None
     phone: Optional[str] = None
     password: Optional[str] = None
+    status: Optional[str] = None
 
 class UserRead(UserBase):
     id: int
@@ -35,6 +36,7 @@ class ToolBase(SQLModel):
     make: str
     capacity: str
     safe_working_load: str
+    tool_type: str = Field(default="Erection Tools") # Erection Tools, Stringing Tools
     purchaser_name: Optional[str] = None
     purchaser_contact: Optional[str] = None
     supplier_code: Optional[str] = None # Added for custom ID generation
@@ -55,10 +57,12 @@ class ToolBase(SQLModel):
     qr_code: str = Field(index=True, unique=True)
     status: str = "usable" # usable, scrap
     expiry_date: Optional[datetime] = None
+    debit_to: Optional[str] = None
 
 class Tool(ToolBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     inspections: List["Inspection"] = Relationship(back_populates="tool")
+    movements: List["MovementHistory"] = Relationship(back_populates="tool")
 
 class ToolCreate(ToolBase):
     pass
@@ -71,6 +75,7 @@ class ToolUpdate(SQLModel):
     make: Optional[str] = None
     capacity: Optional[str] = None
     safe_working_load: Optional[str] = None
+    tool_type: Optional[str] = None
     current_site: Optional[str] = None
     status: Optional[str] = None
     subcontractor_name: Optional[str] = None
@@ -83,6 +88,7 @@ class ToolUpdate(SQLModel):
     expiry_date: Optional[datetime] = None
     validity_period: Optional[int] = None
     date_of_supply: Optional[datetime] = None
+    debit_to: Optional[str] = None
 
 class InspectionBase(SQLModel):
     tool_id: int = Field(foreign_key="tool.id")
@@ -106,6 +112,7 @@ class InspectionRead(InspectionBase):
 
 class InspectionReadWithTool(InspectionRead):
     tool: Optional[ToolRead] = None
+    inspector: Optional[UserRead] = None
 
 class AlertBase(SQLModel):
     type: str # new-tool, expired, maintenance-due
@@ -125,6 +132,27 @@ class Alert(AlertBase, table=True):
 class AlertCreate(AlertBase):
     pass
 
+
+
 class AlertRead(AlertBase):
     id: int
     tool: Optional[ToolRead] = None
+
+class MovementHistoryBase(SQLModel):
+    tool_id: int = Field(foreign_key="tool.id")
+    from_site: Optional[str] = None
+    to_site: Optional[str] = None # Current site
+    timestamp: datetime = Field(default_factory=datetime.now)
+    remarks: Optional[str] = None
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id") # Who performed the action
+
+class MovementHistory(MovementHistoryBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tool: Optional[Tool] = Relationship(back_populates="movements")
+    user: Optional[User] = Relationship()
+
+class MovementHistoryRead(MovementHistoryBase):
+    id: int
+    user: Optional[UserRead] = None
+    tool: Optional[ToolRead] = None
+

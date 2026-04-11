@@ -201,7 +201,9 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
                 <Button variant="ghost" className="flex items-center gap-2 hover:bg-gray-100">
                   <div className="text-right hidden sm:block">
                     <p className="text-sm font-medium text-[#0F172A]">{user.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+                    <p className="text-xs text-gray-500 capitalize">
+                      {user.role} {user.site && (user.role === 'store' || user.role === 'inspector') ? `- ${user.site}` : ''}
+                    </p>
                   </div>
                   <div className="w-10 h-10 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white font-medium">
                     {user.name.charAt(0)}
@@ -214,7 +216,7 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">{user?.name}</p>
                     <p className="text-xs leading-none text-muted-foreground capitalize">
-                      {user?.role}
+                      {user?.role} {user?.site && (user?.role === 'store' || user?.role === 'inspector') ? `- ${user.site}` : ''}
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -232,10 +234,10 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
       <div className="flex">
         {/* Sidebar - Desktop */}
         <aside
-          className={`hidden lg:block bg-white border-r border-gray-200 transition-all duration-300 shrink-0 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'
+          className={`hidden lg:flex flex-col bg-white border-r border-gray-200 transition-all duration-300 shrink-0 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'
             }`}
         >
-          <nav className="p-4 space-y-1">
+          <nav className="p-4 space-y-1 flex-1">
             {filteredNavItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
@@ -253,13 +255,18 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
               );
             })}
           </nav>
+          {sidebarOpen && (
+            <div className="p-4 border-t border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400 font-medium">UJ Enterprises & Tharamac &copy; 2026<br />QR Tool Management System</p>
+            </div>
+          )}
         </aside>
 
         {/* Sidebar - Mobile */}
         {mobileMenuOpen && (
           <div className="lg:hidden fixed inset-0 z-40 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)}>
-            <aside className="w-64 bg-white h-full" onClick={(e) => e.stopPropagation()}>
-              <nav className="p-4 space-y-1">
+            <aside className="w-64 bg-white h-full flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <nav className="p-4 space-y-1 flex-1">
                 {filteredNavItems.map((item) => {
                   const isActive = location.pathname === item.path;
                   return (
@@ -278,6 +285,9 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
                   );
                 })}
               </nav>
+              <div className="p-4 border-t border-gray-100 text-center mt-auto">
+                <p className="text-[10px] text-gray-400 font-medium">UJ Enterprises & Tharamac &copy; 2026<br />QR Tool Management System</p>
+              </div>
             </aside>
           </div>
         )}

@@ -50,4 +50,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
     user = session.exec(statement).first()
     if user is None:
         raise credentials_exception
+    if user.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated",
+        )
     return user

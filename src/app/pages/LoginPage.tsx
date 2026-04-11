@@ -9,6 +9,7 @@ import api from '../services/api';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
+import ltLogo from '../../assets/lt-logo.png';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
@@ -30,7 +31,11 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
       handleWorkerAccess();
     } else {
       setSelectedRole(role);
-      setUsername(role); // Auto-fill username based on role for simplicity in this flow
+      if (role === 'store' || role === 'inspector') {
+        setUsername(''); // Do not auto-fill for store and inspector
+      } else {
+        setUsername(role); // Auto-fill username based on role for simplicity in this flow
+      }
       setPassword(''); // Clear password
     }
   };
@@ -101,19 +106,32 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
 
       const { access_token, role } = response.data;
       localStorage.setItem('token', access_token);
+      
+      // Fetch full profile from backend to guarantee latest fields (name, site)
+      const profileRes = await api.get('/users/me');
+      const profile = profileRes.data;
 
       const user: User = {
-        id: username,
-        name: username,
-        role: role as User['role']
+        id: profile.username || username,
+        name: profile.full_name || profile.username || username,
+        role: profile.role as User['role'],
+        site: profile.site
       };
 
       onLogin(user);
       toast.success('Login successful');
       handleNavigation(role, scannedQr ? { qrCode: scannedQr } : {});
-    } catch (error) {
-      toast.error('Invalid credentials');
+    } catch (error: any) {
       console.error('Login failed', error);
+      if (error.response && error.response.data && error.response.data.detail) {
+        toast.error(error.response.data.detail);
+      } else if (error.response && error.response.status === 401) {
+        toast.error('No users found. Please check your credentials.');
+      } else if (error.message === "Network Error" || !error.response) {
+        toast.error('Server is unreachable. Please try again later.');
+      } else {
+        toast.error('Login failed. Please try again.');
+      }
     }
   };
 
@@ -169,44 +187,49 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4 font-sans">
-      <div className="w-full max-w-5xl h-screen md:h-[600px] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row border border-gray-100">
+    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 font-sans relative overflow-hidden">
 
-        {/* Left Panel - Branding */}
-        <div className="w-full md:w-2/5 bg-[#2563EB] p-8 md:p-12 text-white flex flex-col justify-between relative overflow-hidden">
-          {/* Background Decorative Circles */}
-          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-blue-500 opacity-20"></div>
-          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 rounded-full bg-blue-700 opacity-20"></div>
+      {/* Background Video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover opacity-50 z-0"
+      >
+        <source src="/bg-video.mp4" type="video/mp4" />
+      </video>
 
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
-                <QrCode className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-2xl font-bold tracking-tight">QR Tool MS</h1>
-            </div>
+      {/* Dynamic Background Effects */}
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full mix-blend-screen filter blur-[128px]"></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-cyan-600/10 rounded-full mix-blend-screen filter blur-[128px]"></div>
 
-            <h2 className="text-3xl font-bold leading-tight mb-4">
-              Industrial Tool Tracking Platform
-            </h2>
-            <p className="text-blue-100 text-lg leading-relaxed">
-              Centralized digital platform for tracking industrial tools efficiently using QR codes. Secure, fast, and role-based.
-            </p>
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 z-0"></div>
+
+      <div className="w-full max-w-[450px] relative z-10 transition-all duration-500">
+        {/* Logo/Header */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-[#134377] p-5 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/10 shadow-[0_0_25px_rgba(19,67,119,0.4)] mb-5 w-40 h-28">
+            <img
+              src={ltLogo}
+              alt="L&T Construction Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
-
-          <div className="relative z-10 mt-8 md:mt-0">
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-1">QR Tool MS</h1>
+          <p className="text-blue-400/80 text-xs font-semibold tracking-[0.2em] uppercase">Enterprise Access</p>
         </div>
 
-        {/* Right Panel - Content */}
-        <div className="w-full md:w-3/5 p-8 md:p-12 overflow-y-auto">
+        <div className="bg-neutral-900/60 backdrop-blur-xl rounded-3xl p-8 border border-white/10 shadow-2xl relative overflow-hidden">
+          {/* Internal subtle glow */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl"></div>
 
           {!selectedRole ? (
-            // Role Selection View
-            <div className="h-full flex flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome</h2>
-                <p className="text-gray-500">Select your portal to continue.</p>
+            // Role Selection View 
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold text-white mb-1">Select Role</h2>
+                <p className="text-sm text-neutral-400">Choose your portal to continue</p>
               </div>
 
               <div className="space-y-3">
@@ -214,65 +237,81 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                   <button
                     key={role.id}
                     onClick={() => handleRoleSelect(role.id)}
-                    className="w-full flex items-center p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all duration-200 group text-left bg-white shadow-sm hover:shadow-md"
+                    className="w-full flex items-center p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all duration-200 text-left group"
                   >
-                    <div className={`w-12 h-12 rounded-full ${role.color} flex items-center justify-center mr-4 group-hover:scale-110 transition-transform`}>
-                      <role.icon className="w-6 h-6" />
+                    <div className={`w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mr-3 border border-white/5`}>
+                      <role.icon className="w-5 h-5 text-gray-300 group-hover:text-white transition-colors" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{role.title}</h3>
-                      <p className="text-sm text-gray-500">{role.description}</p>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-gray-200 group-hover:text-white transition-colors">{role.title}</h3>
+                      <p className="text-xs text-neutral-500">{role.description}</p>
                     </div>
-                    {role.noLogin && (
-                      <span className="ml-auto text-xs text-gray-400 font-medium px-2 py-1 bg-gray-100 rounded">No Login</span>
+                    {role.noLogin ? (
+                      <span className="text-[10px] text-orange-400/90 font-medium px-2 py-0.5 border border-orange-500/20 rounded bg-orange-500/10">Guest</span>
+                    ) : (
+                      <ArrowLeft className="w-4 h-4 text-neutral-500 group-hover:text-white rotate-180 transition-colors" />
                     )}
                   </button>
                 ))}
               </div>
             </div>
           ) : (
-            // Login Form View
-            <div className="h-full flex flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300">
-              <Button
-                variant="ghost"
-                onClick={handleBackToRoles}
-                className="self-start mb-6 -ml-4 text-gray-500 hover:text-gray-900"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" /> Back to Roles
-              </Button>
+            // Login Form View 
+            <div className="animate-in fade-in slide-in-from-right-4 duration-500 relative">
 
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2 capitalize">{selectedRole === 'inspector' ? 'Inspection' : selectedRole} Portal</h2>
-                <p className="text-gray-500">Please authenticate to continue.</p>
+              <button
+                onClick={handleBackToRoles}
+                className="absolute -top-2 -left-2 text-neutral-400 hover:text-white flex items-center text-xs font-medium transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back
+              </button>
+
+              <div className="text-center mb-8 mt-6">
+                <div className="w-12 h-12 mx-auto bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-3">
+                  {(() => {
+                    const Icon = roleCards.find(r => r.id === selectedRole)?.icon || UserCog;
+                    return <Icon className="w-6 h-6 text-blue-400" />;
+                  })()}
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-1 tracking-tight capitalize">{selectedRole === 'inspector' ? 'Inspection' : selectedRole} Portal</h2>
+                <p className="text-neutral-400 text-sm font-medium">Authenticate your session</p>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-5">
 
                 {selectedRole === 'admin' && (
-                  <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                    <Label className="text-gray-700 font-medium">Session Action</Label>
-                    <RadioGroup value={adminAction} onValueChange={setAdminAction} className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="new" id="l-new" />
-                        <Label htmlFor="l-new" className="cursor-pointer">Create New Tool</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="edit" id="l-edit" />
-                        <Label htmlFor="l-edit" className="cursor-pointer">Edit Existing Tool</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="saved" id="l-saved" />
-                        <Label htmlFor="l-saved" className="cursor-pointer">Inventory View</Label>
-                      </div>
-                    </RadioGroup>
+                  <div className="space-y-3 p-4 bg-black/30 rounded-xl border border-white/5 shadow-inner">
+                    <Label className="text-neutral-400 text-xs font-bold uppercase tracking-wider">Session Action</Label>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      {['new', 'edit', 'saved'].map((actionId) => (
+                        <label key={actionId} className={`flex items-center p-2.5 border rounded-lg cursor-pointer transition-colors ${adminAction === actionId ? 'border-blue-500/50 bg-blue-500/10' : 'border-white/10 hover:bg-white/5'}`}>
+                          <input
+                            type="radio"
+                            name="adminAction"
+                            value={actionId}
+                            checked={adminAction === actionId}
+                            onChange={(e) => setAdminAction(e.target.value)}
+                            className="w-4 h-4 text-blue-500 bg-transparent border-neutral-600 focus:ring-blue-500 focus:ring-offset-neutral-900"
+                          />
+                          <span className={`ml-3 text-sm font-medium ${adminAction === actionId ? 'text-blue-100' : 'text-neutral-300'}`}>
+                            {actionId === 'new' && 'Create New Tool'}
+                            {actionId === 'edit' && 'Edit Existing Tool'}
+                            {actionId === 'saved' && 'Inventory View'}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
 
                     {adminAction === 'edit' && (
                       <div className="pt-2">
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
-                          className={`w-full ${scannedQr ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white'}`}
+                          className={`w-full h-10 rounded-lg text-sm font-medium border transition-colors ${scannedQr
+                            ? 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30'
+                            : 'bg-white/5 border-white/10 text-neutral-300 hover:bg-white/10'
+                            }`}
                           onClick={() => fileInputRef.current?.click()}
                         >
                           <Camera className="w-4 h-4 mr-2" />
@@ -284,54 +323,79 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                   </div>
                 )}
 
+                {(selectedRole === 'store' || selectedRole === 'inspector') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="username" className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">User ID / Mail ID</Label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                        <UserCog className="h-4 w-4 text-neutral-500" />
+                      </div>
+                      <Input
+                        id="username"
+                        type="text"
+                        placeholder="Enter User ID or Mail ID"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className="h-12 w-full pl-10 pr-3 rounded-xl border-white/10 bg-black/40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm shadow-inner transition-all text-white placeholder:text-neutral-600"
+                        autoFocus={selectedRole === 'store' || selectedRole === 'inspector'}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">Password</Label>
                   <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <Shield className="h-4 w-4 text-neutral-500" />
+                    </div>
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
+                      placeholder="Enter password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-                      className="h-11 pr-10"
-                      autoFocus
+                      className="h-12 w-full pl-10 pr-10 rounded-xl border-white/10 bg-black/40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm shadow-inner transition-all text-white placeholder:text-neutral-600"
+                      autoFocus={selectedRole !== 'store' && selectedRole !== 'inspector'}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
                     >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Req: 1 Uppercase, 1 Lowercase, 1 Special Char, 1 Number
-                  </p>
                 </div>
 
-                <Button
-                  className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] h-11 text-base font-medium"
-                  onClick={handleLogin}
-                >
-                  Login to Portal
-                </Button>
-
-
+                <div className="pt-4">
+                  <Button
+                    className="w-full h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)] hover:-translate-y-0.5 transition-all duration-200"
+                    onClick={handleLogin}
+                  >
+                    Sign In
+                  </Button>
+                </div>
               </div>
 
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept="image/*"
-                onChange={handleFileUpload}
-              />
             </div>
           )}
 
         </div>
+
+        <div className="mt-6 text-center text-xs text-white font-medium">
+          UJ Enterprises & Tharamac &copy; 2026 QR Tool Management System
+        </div>
       </div>
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/*"
+        onChange={handleFileUpload}
+      />
     </div>
   );
 };

@@ -49,9 +49,9 @@ const Alerts = () => {
     fetchAlerts();
   }, []);
 
-  const criticalAlerts = alerts.filter(a => a.severity === 'critical');
-  const warningAlerts = alerts.filter(a => a.severity === 'warning');
-  const infoAlerts = alerts.filter(a => a.severity === 'info');
+  const criticalAlerts = alerts.filter(a => a.severity === 'critical' && !a.is_read);
+  const warningAlerts = alerts.filter(a => a.severity === 'warning' && !a.is_read);
+  const infoAlerts = alerts.filter(a => a.severity === 'info' && !a.is_read);
 
   // Format date/time helper if needed, assuming backend returns ISO date
   const formatDate = (dateString: string) => {
@@ -105,8 +105,19 @@ const Alerts = () => {
     }
   };
 
-  const handleMarkAsRead = (id: number) => {
-    toast.success('Alert marked as read');
+  const handleMarkAsRead = async (id: number) => {
+    // Optimistic update
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, is_read: true } : a));
+
+    // Only call API for persistent alerts (positive IDs)
+    if (id > 0) {
+      try {
+        await api.post(`/alerts/${id}/read`);
+        toast.success('Alert marked as read');
+      } catch (error) {
+        console.error("Failed to mark as read", error);
+      }
+    }
   };
 
   const handleResolve = (id: number) => {
@@ -155,20 +166,15 @@ const Alerts = () => {
             </div>
 
             <div className="flex items-center gap-2 pt-2 border-t">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleMarkAsRead(alert.id)}
-              >
-                Mark as Read
-              </Button>
-              <Button
-                size="sm"
-                className="bg-[#1E3A8A]"
-                onClick={() => handleResolve(alert.id)}
-              >
-                Resolve
-              </Button>
+              {!alert.is_read && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleMarkAsRead(alert.id)}
+                >
+                  Mark as Read
+                </Button>
+              )}
               <Button size="sm" variant="ghost" onClick={() => handleViewDetails(alert)}>
                 View Details
               </Button>

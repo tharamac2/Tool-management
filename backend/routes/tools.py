@@ -29,17 +29,25 @@ def create_tool(tool: ToolCreate, session: Session = Depends(get_session), curre
     
     return db_tool
 
+@router.get("/sites/", response_model=List[str])
+def read_sites(session: Session = Depends(get_session)):
+    query = select(Tool.current_site).distinct().where(Tool.current_site != None)
+    return session.exec(query).all()
+
 @router.get("/", response_model=List[ToolRead])
 def read_tools(
     offset: int = 0, 
     limit: int = 100, 
     search: Optional[str] = None,
+    site: Optional[str] = None,
     session: Session = Depends(get_session), 
     current_user: User = Depends(get_current_user)
 ):
     query = select(Tool)
     if search:
         query = query.where(Tool.description.contains(search) | Tool.qr_code.contains(search))
+    if site:
+        query = query.where(Tool.current_site == site)
     
     tools = session.exec(query.offset(offset).limit(limit)).all()
     return tools
@@ -57,9 +65,25 @@ def update_tool(tool_id: int, tool_update: ToolUpdate, session: Session = Depend
     if not db_tool:
         raise HTTPException(status_code=404, detail="Tool not found")
     
+    old_site = db_tool.current_site
+
     tool_data = tool_update.dict(exclude_unset=True)
     for key, value in tool_data.items():
         setattr(db_tool, key, value)
+    
+    # Check for site movement and record history
+    if "current_site" in tool_data: 
+        if old_site != tool_data["current_site"]:
+            from ..models import MovementHistory
+            # Create history record
+            history = MovementHistory(
+                tool_id=db_tool.id,
+                from_site=old_site,
+                to_site=db_tool.current_site,
+                remarks=tool_data.get("remarks"), # Capture remarks if any from this update
+                user_id=current_user.id
+            )
+            session.add(history)
     
     session.add(db_tool)
     session.commit()

@@ -18,6 +18,7 @@ import Alerts from "./pages/Alerts";
 import UsersManagement from "./pages/UsersManagement";
 import SettingsPage from "./pages/SettingsPage";
 import ViewTool from "./pages/ViewTool";
+import SplashScreen from "./components/SplashScreen";
 import { Toaster } from "./components/ui/sonner";
 import api from './services/api';
 
@@ -31,10 +32,12 @@ export interface User {
   | "inspector"
   | "management"
   | "worker";
+  site?: string;
 }
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [showSplash, setShowSplash] = useState(true);
 
   const handleLogin = (user: User) => {
     setUser(user);
@@ -55,7 +58,8 @@ function App() {
           setUser({
             id: userData.username,
             name: userData.full_name || userData.username,
-            role: userData.role as User['role']
+            role: userData.role as User['role'],
+            site: userData.site
           });
         } catch (error) {
           console.error("Session restoration failed", error);
@@ -65,6 +69,10 @@ function App() {
     };
     checkAuth();
   }, []);
+
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
 
   return (
     <BrowserRouter>

@@ -16,6 +16,7 @@ import {
   Globe
 } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '../services/api';
 
 const SettingsPage = () => {
   const [companyName, setCompanyName] = useState('Industrial Tools Co.');
@@ -235,7 +236,29 @@ const SettingsPage = () => {
               <div className="space-y-4">
                 <h3 className="font-medium">Data Export</h3>
                 <div className="flex gap-2">
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={async () => {
+                    const toastId = toast.loading('Generating Full Data PDF...');
+                    try {
+                      // Use configured API instance which handles base URL and Auth headers
+                      const response = await api.get('/export/full-data-pdf', {
+                        responseType: 'blob'
+                      });
+
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `System_Export_${new Date().toISOString().slice(0, 10)}.pdf`;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      document.body.removeChild(a);
+
+                      toast.success('Export completed successfully', { id: toastId });
+                    } catch (error) {
+                      console.error(error);
+                      toast.error('Failed to export data. Please check connection.', { id: toastId });
+                    }
+                  }}>
                     Export All Data
                   </Button>
                   <Button variant="outline">
