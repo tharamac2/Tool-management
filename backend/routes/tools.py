@@ -10,6 +10,23 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 @router.post("/", response_model=ToolRead)
 def create_tool(tool: ToolCreate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
     db_tool = Tool.from_orm(tool)
+    db_tool.created_by_id = current_user.id
+    
+    # If Data Entry user, enforce their assigned site and validate it exists
+    if current_user.role == "data_entry":
+        if not current_user.site:
+            raise HTTPException(status_code=403, detail="No site assigned to this Data Entry user.")
+        
+        # Enforce site
+        db_tool.current_site = current_user.site
+        
+        # Validate site exists in DB
+        # Rule: Only allow if store already exists in DB
+        site_exists = session.exec(select(Tool).where(Tool.current_site == current_user.site)).first()
+        if not site_exists:
+            raise HTTPException(status_code=400, detail="Invalid Store: Assigned store does not exist in system records.")
+        
+
     session.add(db_tool)
     session.commit()
     session.refresh(db_tool)
@@ -40,14 +57,22 @@ def read_tools(
     limit: int = 100, 
     search: Optional[str] = None,
     site: Optional[str] = None,
+    created_by: Optional[int] = None,
     session: Session = Depends(get_session), 
     current_user: User = Depends(get_current_user)
 ):
     query = select(Tool)
+    
+    # Filtering for Data Entry role: show only their assigned site
+    if current_user.role == "data_entry" and current_user.site:
+        query = query.where(Tool.current_site == current_user.site)
+    
     if search:
         query = query.where(Tool.description.contains(search) | Tool.qr_code.contains(search))
     if site:
         query = query.where(Tool.current_site == site)
+    if created_by:
+        query = query.where(Tool.created_by_id == created_by)
     
     tools = session.exec(query.offset(offset).limit(limit)).all()
     return tools

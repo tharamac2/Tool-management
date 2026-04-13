@@ -6,6 +6,7 @@ import { QrCode, CheckCircle, XCircle, Slash, Camera } from 'lucide-react';
 import api from '../services/api';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
+import ScannerDialog from '../components/ScannerDialog';
 
 const WorkerView = () => {
   const [scannedTool, setScannedTool] = useState<any>(null);
@@ -134,14 +135,20 @@ const WorkerView = () => {
                       )}
                     </div>
                     <p className="text-xl text-gray-600">Scan Tool QR Code</p>
+                    <ScannerDialog 
+                      onScan={handleScan} 
+                      buttonText="Live Camera Scanner"
+                      triggerClassName="w-full text-lg py-6 bg-[#16A34A] hover:bg-[#16A34A]/90"
+                    />
                     <Button
                       size="lg"
-                      className="bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 w-full text-lg py-6"
+                      variant="outline"
+                      className="w-full text-lg py-6 border-dashed border-2"
                       onClick={triggerCamera}
                       disabled={scanning}
                     >
                       <Camera className="w-6 h-6 mr-2" />
-                      Scan with Google Lens
+                      Upload QR Image
                     </Button>
                   </div>
 

@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
     path: '/tool-master',
     label: 'Tool Master',
     icon: <Package className="w-5 h-5" />,
-    roles: ['admin'],
+    roles: ['admin', 'data_entry'],
   },
   {
     path: '/store-view',
@@ -202,7 +202,7 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
                   <div className="text-right hidden sm:block">
                     <p className="text-sm font-medium text-[#0F172A]">{user.name}</p>
                     <p className="text-xs text-gray-500 capitalize">
-                      {user.role} {user.site && (user.role === 'store' || user.role === 'inspector') ? `- ${user.site}` : ''}
+                      {user.role} {user.site && (user.role === 'store' || user.role === 'inspector' || user.role === 'data_entry') ? `- ${user.site}` : ''}
                     </p>
                   </div>
                   <div className="w-10 h-10 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white font-medium">
@@ -216,7 +216,7 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">{user?.name}</p>
                     <p className="text-xs leading-none text-muted-foreground capitalize">
-                      {user?.role} {user?.site && (user?.role === 'store' || user?.role === 'inspector') ? `- ${user.site}` : ''}
+                      {user?.role} {user?.site && (user?.role === 'store' || user?.role === 'inspector' || user?.role === 'data_entry') ? `- ${user.site}` : ''}
                     </p>
                   </div>
                 </DropdownMenuLabel>

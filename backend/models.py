@@ -6,7 +6,7 @@ class UserBase(SQLModel):
     username: str = Field(index=True, unique=True)
     email: str = Field(index=True, unique=True)
     full_name: Optional[str] = None
-    role: str = "worker" # admin, store, inspector, management, worker
+    role: str = "worker" # admin, store, inspector, management, worker, data_entry
     site: Optional[str] = None
     phone: Optional[str] = None
     status: str = "active"
@@ -48,6 +48,7 @@ class ToolBase(SQLModel):
     validity_period: Optional[int] = None
     subcontractor_name: Optional[str] = None
     subcontractor_code: Optional[str] = None
+    subcontractor_mobile: Optional[str] = None
     remarks: Optional[str] = None
     previous_site: Optional[str] = None
     current_site: Optional[str] = None
@@ -58,17 +59,22 @@ class ToolBase(SQLModel):
     status: str = "usable" # usable, scrap
     expiry_date: Optional[datetime] = None
     debit_to: Optional[str] = None
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
 
 class Tool(ToolBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     inspections: List["Inspection"] = Relationship(back_populates="tool")
     movements: List["MovementHistory"] = Relationship(back_populates="tool")
+    creator: Optional["User"] = Relationship()
 
 class ToolCreate(ToolBase):
     pass
 
 class ToolRead(ToolBase):
     id: int
+
+class ToolReadWithCreator(ToolRead):
+    creator: Optional[UserRead] = None
 
 class ToolUpdate(SQLModel):
     description: Optional[str] = None
@@ -80,6 +86,7 @@ class ToolUpdate(SQLModel):
     status: Optional[str] = None
     subcontractor_name: Optional[str] = None
     subcontractor_code: Optional[str] = None
+    subcontractor_mobile: Optional[str] = None
     job_code: Optional[str] = None
     job_description: Optional[str] = None
     remarks: Optional[str] = None
@@ -132,8 +139,6 @@ class Alert(AlertBase, table=True):
 class AlertCreate(AlertBase):
     pass
 
-
-
 class AlertRead(AlertBase):
     id: int
     tool: Optional[ToolRead] = None
@@ -155,4 +160,3 @@ class MovementHistoryRead(MovementHistoryBase):
     id: int
     user: Optional[UserRead] = None
     tool: Optional[ToolRead] = None
-

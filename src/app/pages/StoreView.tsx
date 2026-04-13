@@ -38,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import ScannerDialog from '../components/ScannerDialog';
 
 const StoreView = () => {
   const [storeLocation, setStoreLocation] = useState<string>('Store');
@@ -60,9 +61,11 @@ const StoreView = () => {
   const [formData, setFormData] = useState({
     subcontractorName: '',
     subcontractorCode: '',
+    subcontractorMobile: '',
     targetSite: '', // Current Site updates to "Store" on In, or specific site on Out
     remarks: ''
   });
+  const [mobileError, setMobileError] = useState('');
 
   // Last Transaction
   const [lastTransaction, setLastTransaction] = useState<any>(null);
@@ -135,6 +138,7 @@ const StoreView = () => {
       setFormData({
         subcontractorName: res.data.subcontractor_name || '',
         subcontractorCode: res.data.subcontractor_code || '',
+        subcontractorMobile: res.data.subcontractor_mobile || '',
         targetSite: '',
         remarks: ''
       });
@@ -249,6 +253,15 @@ const StoreView = () => {
   const handleSubmit = async () => {
     if (!scannedTool) return;
 
+    // Mobile Validation
+    if ((transactionType === 'out' && outSubCategory === 'subcon_work') ||
+      (transactionType === 'out' && outSubCategory === 'scrap_disposal')) {
+      if (formData.subcontractorMobile && !/^\d{10}$/.test(formData.subcontractorMobile)) {
+        toast.error("Please enter a valid 10-digit mobile number");
+        return;
+      }
+    }
+
     try {
       let payload: any = {};
 
@@ -283,6 +296,7 @@ const StoreView = () => {
           payload.current_site = formData.targetSite || scannedTool.current_site; // Optional update site
           payload.subcontractor_name = formData.subcontractorName;
           payload.subcontractor_code = formData.subcontractorCode;
+          payload.subcontractor_mobile = formData.subcontractorMobile;
           payload.remarks = `Issued to Sub-Contractor. ${formData.remarks}`;
         } else if (outSubCategory === 'site_transfer') {
           payload.current_site = formData.targetSite;
@@ -294,6 +308,7 @@ const StoreView = () => {
           payload.current_site = 'Scrap Yard';
           payload.subcontractor_name = formData.subcontractorName; // Reusing for Scrap Dealer Name
           payload.subcontractor_code = formData.subcontractorCode; // Reusing for Scrap Dealer Code
+          payload.subcontractor_mobile = formData.subcontractorMobile;
           payload.debit_to = null;
           payload.remarks = `Sent to Scrap Dealer: ${formData.subcontractorName} (${formData.subcontractorCode}). ${formData.remarks}`;
         }
@@ -432,10 +447,20 @@ const StoreView = () => {
         <CardContent className="py-6 flex flex-col items-center gap-4">
           <div id="reader-hidden-store" className="hidden"></div>
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-          <Button size="lg" className="bg-[#1E3A8A] w-full md:w-auto" onClick={triggerScan} disabled={scanning}>
-            <QrCode className="w-5 h-5 mr-2" />
-            {scanning ? 'Scanning...' : 'Scan / Upload QR'}
-          </Button>
+          
+          <div className="flex flex-col md:flex-row gap-3 w-full justify-center">
+            <ScannerDialog 
+              onScan={fetchToolDetails} 
+              buttonText="Live Camera Scanner"
+              triggerClassName="bg-green-600 hover:bg-green-700 text-white px-8"
+            />
+            
+            <Button size="lg" variant="outline" className="border-gray-300 px-8" onClick={triggerScan} disabled={scanning}>
+              <QrCode className="w-5 h-5 mr-2" />
+              {scanning ? 'Scanning...' : 'Upload QR Image'}
+            </Button>
+          </div>
+          
           {/* Dev Manual Input */}
           <Input placeholder="Manual QR Entry" className="w-40 h-8 text-sm" onKeyDown={(e) => { if (e.key === 'Enter') { fetchToolDetails(e.currentTarget.value); e.currentTarget.value = ''; } }} />
         </CardContent>
@@ -637,6 +662,25 @@ const StoreView = () => {
                             onChange={(e) => setFormData({ ...formData, subcontractorCode: e.target.value })}
                           />
                         </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label className="flex justify-between">
+                            Sub-Contractor Mobile
+                            {mobileError && <span className="text-red-500 text-[10px]">{mobileError}</span>}
+                          </Label>
+                          <Input
+                            placeholder="10-digit mobile number"
+                            value={formData.subcontractorMobile}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                              setFormData({ ...formData, subcontractorMobile: val });
+                              if (val && val.length !== 10) {
+                                setMobileError('Must be 10 digits');
+                              } else {
+                                setMobileError('');
+                              }
+                            }}
+                          />
+                        </div>
                       </>
                     )}
 
@@ -656,6 +700,25 @@ const StoreView = () => {
                             placeholder="Dealer Code"
                             value={formData.subcontractorCode}
                             onChange={(e) => setFormData({ ...formData, subcontractorCode: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label className="flex justify-between">
+                            Scrap Dealer Mobile
+                            {mobileError && <span className="text-red-500 text-[10px]">{mobileError}</span>}
+                          </Label>
+                          <Input
+                            placeholder="10-digit mobile number"
+                            value={formData.subcontractorMobile}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                              setFormData({ ...formData, subcontractorMobile: val });
+                              if (val && val.length !== 10) {
+                                setMobileError('Must be 10 digits');
+                              } else {
+                                setMobileError('');
+                              }
+                            }}
                           />
                         </div>
                       </>

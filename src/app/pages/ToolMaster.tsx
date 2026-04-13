@@ -102,12 +102,16 @@ const TOOLS_LIST = [
   "Winch Machine – 5T (With Mechanical Clamp)"
 ];
 
-const ToolMaster = () => {
+import { User } from '../App';
+
+const ToolMaster = ({ user }: { user?: User }) => {
   console.log("Rendering ToolMaster");
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.view || 'new');
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
   const [savedTools, setSavedTools] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [allSites, setAllSites] = useState<string[]>([]);
 
   // Tab switching effect
   useEffect(() => {
@@ -160,7 +164,11 @@ const ToolMaster = () => {
 
   useEffect(() => {
     fetchTools();
-  }, []);
+    api.get('/tools/sites/').then(res => setAllSites(res.data)).catch(err => console.error(err));
+    if (user?.role === 'admin') {
+      api.get('/users/').then(res => setAllUsers(res.data)).catch(err => console.error(err));
+    }
+  }, [user]);
 
   const [toolData, setToolData] = useState({
     description: '',
@@ -181,7 +189,7 @@ const ToolMaster = () => {
     validityPeriod: '',
     subcontractorName: '',
     previousSite: '',
-    currentSite: '',
+    currentSite: user?.role === 'data_entry' ? user.site || '' : '',
     nextSite: '',
     expiryDate: undefined as Date | undefined,
   });
@@ -189,6 +197,7 @@ const ToolMaster = () => {
   const [qrCode, setQrCode] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [createdByFilter, setCreatedByFilter] = useState('all');
   const [editingToolId, setEditingToolId] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [isToolSaved, setIsToolSaved] = useState(false);
@@ -216,8 +225,9 @@ const ToolMaster = () => {
       tool.current_site?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || tool.status === statusFilter;
+    const matchesCreator = createdByFilter === 'all' || tool.created_by_id === parseInt(createdByFilter);
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesCreator;
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -617,9 +627,11 @@ const ToolMaster = () => {
           <h1 className="text-3xl font-semibold text-[#0F172A]">Tool Master</h1>
           <p className="text-gray-500 mt-1">Manage tool inventory, generate QR codes, and track assets.</p>
         </div>
-        <Button onClick={() => setIsImportModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
-          <UploadCloud className="mr-2 h-4 w-4" /> Bulk Import
-        </Button>
+        {user?.role === 'admin' && (
+          <Button onClick={() => setIsImportModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+            <UploadCloud className="mr-2 h-4 w-4" /> Bulk Import
+          </Button>
+        )}
       </div>
 
       {/* Bulk Import Modal */}
@@ -888,6 +900,40 @@ const ToolMaster = () => {
                       />
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t">
+                    <div className="space-y-2">
+                      <Label htmlFor="currentSite">Current Site / Store <span className="text-red-600">*</span></Label>
+                      {user?.role === 'data_entry' ? (
+                        <div className="h-10 px-3 py-2 rounded-md border border-input bg-blue-50 text-blue-800 font-semibold text-sm flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-blue-500" />
+                          {user.site || 'No Site Assigned'}
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Select
+                            value={toolData.currentSite}
+                            onValueChange={value => handleInputChange('currentSite', value)}
+                          >
+                            <SelectTrigger className={`flex-1 ${errors.currentSite ? 'border-red-500' : ''}`}>
+                              <SelectValue placeholder="Select Store / Site" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allSites.map(site => (
+                                <SelectItem key={site} value={site}>{site}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            placeholder="Or Enter New Site"
+                            className="w-[150px]"
+                            value={toolData.currentSite}
+                            onChange={e => handleInputChange('currentSite', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -993,8 +1039,8 @@ const ToolMaster = () => {
                 </CardContent>
               </Card>
             </div>
-          </div >
-        </TabsContent >
+          </div>
+        </TabsContent>
 
         <TabsContent value="saved" className="space-y-6">
           <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -1019,6 +1065,21 @@ const ToolMaster = () => {
                 </SelectContent>
               </Select>
             </div>
+            {user?.role === 'admin' && (
+              <div className="w-full md:w-[200px]">
+                <Select value={createdByFilter} onValueChange={setCreatedByFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by User" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    {allUsers.map(u => (
+                      <SelectItem key={u.id} value={u.id.toString()}>{u.full_name || u.username}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="rounded-md border bg-white shadow-sm overflow-hidden">
@@ -1031,6 +1092,7 @@ const ToolMaster = () => {
                   <TableHead>Capacity</TableHead>
                   <TableHead>Current Site</TableHead>
                   <TableHead>Status</TableHead>
+                  {user?.role === 'admin' && <TableHead>Entry By</TableHead>}
                   <TableHead className="text-center">QR</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -1057,6 +1119,11 @@ const ToolMaster = () => {
                           {tool.status}
                         </span>
                       </TableCell>
+                      {user?.role === 'admin' && (
+                        <TableCell className="text-xs text-gray-500">
+                          {tool.created_by_id ? `User #${tool.created_by_id}` : 'System'}
+                        </TableCell>
+                      )}
                       <TableCell className="text-center">
                         <div className="hidden" id={`qr-wrapper-list-${tool.id}`}>
                           <QRCodeCanvas
@@ -1091,16 +1158,18 @@ const ToolMaster = () => {
                           <Download className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                      <TableCell className="text-right">
+                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => handleEditTool(tool)}
-                          >
-                            <Edit className="h-4 w-4 text-gray-500 hover:text-blue-700" />
-                          </Button>
+                          {user?.role === 'admin' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => handleEditTool(tool)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1116,7 +1185,7 @@ const ToolMaster = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={user?.role === 'admin' ? 9 : 8} className="h-24 text-center">
                       No tools found matching your criteria.
                     </TableCell>
                   </TableRow>
@@ -1295,7 +1364,7 @@ const ToolMaster = () => {
           </div>
         </div>
       )}
-    </div >
+    </div>
   );
 };
 

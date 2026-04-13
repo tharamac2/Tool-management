@@ -31,7 +31,8 @@ export interface User {
   | "store"
   | "inspector"
   | "management"
-  | "worker";
+  | "worker"
+  | "data_entry";
   site?: string;
 }
 
@@ -92,8 +93,8 @@ function App() {
                   {user.role === "admin" && (
                     <>
                       <Route path="/" element={<Navigate to="/tool-master" replace />} />
-                      <Route path="/tool-master" element={<ToolMaster />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/tool-master" element={<ToolMaster user={user} />} />
+                      <Route path="/dashboard" element={<Dashboard user={user} />} />
                       <Route path="/reports" element={<Reports />} />
                       <Route path="/alerts" element={<Alerts />} />
                       <Route path="/users" element={<UsersManagement />} />
@@ -115,7 +116,7 @@ function App() {
                   {user.role === "management" && (
                     <>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/dashboard" element={<Dashboard user={user} />} />
                       <Route path="/reports" element={<Reports />} />
                       <Route path="/alerts" element={<Alerts />} />
                     </>
@@ -127,7 +128,13 @@ function App() {
                       <Route path="/split-tool" element={<SplitToolMatching />} />
                     </>
                   )}
-                  <Route path="*" element={<Navigate to="/" replace />} />
+                    {user.role === "data_entry" && (
+                      <>
+                        <Route path="/" element={<Navigate to="/tool-master" replace />} />
+                        <Route path="/tool-master" element={<ToolMaster user={user} />} />
+                      </>
+                    )}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
             )

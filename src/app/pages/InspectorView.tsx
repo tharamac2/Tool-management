@@ -13,6 +13,7 @@ import { mockTools, mockInspections } from '../types/tool';
 import { toast } from 'sonner';
 import { DatePicker } from '../components/ui/date-picker';
 import api from '../services/api';
+import ScannerDialog from '../components/ScannerDialog';
 
 const InspectorView = () => {
   const [scannedTool, setScannedTool] = useState<any>(null);
@@ -206,10 +207,15 @@ const InspectorView = () => {
                 onChange={handleFileUpload}
                 className="hidden"
               />
+              <ScannerDialog 
+                onScan={handleScan} 
+                buttonText="Live Camera Scanner"
+                triggerClassName="w-full mb-2 bg-green-600 hover:bg-green-700 text-white"
+              />
               <Button
                 variant="outline"
                 onClick={triggerScan}
-                className="w-full border-dashed border-2 border-green-500 text-green-700 hover:bg-green-50"
+                className="w-full border-dashed border-2 border-gray-400 text-gray-700 hover:bg-gray-50"
                 disabled={scanning}
               >
                 {scanning ? "Scanning Image..." : "📷 Upload QR Image"}

@@ -251,6 +251,8 @@ const UsersManagement = () => {
         return <Badge className="bg-green-600">Store Manager</Badge>;
       case 'worker':
         return <Badge className="bg-gray-600">Worker</Badge>;
+      case 'data_entry':
+        return <Badge className="bg-teal-600">Data Entry</Badge>;
       default:
         return <Badge variant="secondary">{role}</Badge>;
     }
@@ -341,6 +343,8 @@ const UsersManagement = () => {
                   <SelectContent>
                     <SelectItem value="inspector">Inspector</SelectItem>
                     <SelectItem value="store">Store Manager</SelectItem>
+                    <SelectItem value="worker">Worker</SelectItem>
+                    <SelectItem value="data_entry">Data Entry</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -410,6 +414,7 @@ const UsersManagement = () => {
                     <SelectItem value="inspector">Inspector</SelectItem>
                     <SelectItem value="store">Store Manager</SelectItem>
                     <SelectItem value="worker">Worker</SelectItem>
+                    <SelectItem value="data_entry">Data Entry</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

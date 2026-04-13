@@ -67,6 +67,9 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
       case 'management':
         navigate('/dashboard');
         break;
+      case 'data_entry':
+        navigate('/tool-master', { state: { view: 'new', mode: 'create', ...extraState } });
+        break;
       default:
         navigate('/');
     }
@@ -105,6 +108,14 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
       });
 
       const { access_token, role } = response.data;
+      
+      // Role enforcement: Check if the user's role matches the selected portal
+      // Exception: allow 'admin' to access any portal
+      if (selectedRole && role !== selectedRole && role !== 'admin') {
+        toast.error('Invalid username or password');
+        return;
+      }
+
       localStorage.setItem('token', access_token);
       
       // Fetch full profile from backend to guarantee latest fields (name, site)
@@ -175,6 +186,13 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
       description: 'View Dashboard & Reports',
       icon: UserCog, // Using UserCog for now, or maybe a Chart icon if available
       color: 'bg-purple-50 text-purple-600'
+    },
+    {
+      id: 'data_entry',
+      title: 'Data Entry',
+      description: 'Inventory & QR Generation',
+      icon: UserCog,
+      color: 'bg-teal-50 text-teal-600'
     },
     {
       id: 'worker',

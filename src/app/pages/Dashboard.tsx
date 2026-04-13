@@ -22,7 +22,10 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 
-const Dashboard = () => {
+import { User } from '../App';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+
+const Dashboard = ({ user }: { user?: User }) => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         total: 0,
@@ -42,19 +45,29 @@ const Dashboard = () => {
     const [toolAgeData, setToolAgeData] = useState<any[]>([]);
     const [siteActivityData, setSiteActivityData] = useState<any[]>([]);
     const [atRiskTools, setAtRiskTools] = useState<any[]>([]);
+    const [allUsers, setAllUsers] = useState<any[]>([]);
+    const [allSites, setAllSites] = useState<string[]>([]);
+    const [userFilter, setUserFilter] = useState('all');
+    const [siteFilter, setSiteFilter] = useState('all');
 
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
-            const [toolsRes, inspectionsRes, movementsRes] = await Promise.all([
+            const [toolsRes, inspectionsRes, movementsRes, usersRes, sitesRes] = await Promise.all([
                 api.get('/tools/'),
                 api.get('/inspections/'),
-                api.get('/movements/?limit=100')
+                api.get('/movements/?limit=100'),
+                api.get('/users/'),
+                api.get('/tools/sites/')
             ]);
 
             const tools = toolsRes.data;
             const inspections = inspectionsRes.data;
             const movements = movementsRes.data;
+            const users = usersRes.data;
+
+            setAllUsers(users);
+            setAllSites(sitesRes.data);
 
             setAllTools(tools);
 
@@ -268,6 +281,64 @@ const Dashboard = () => {
     useEffect(() => {
         fetchDashboardData();
     }, []);
+
+    // Effect to re-process stats when filters change
+    useEffect(() => {
+        if (allTools.length === 0) return;
+        
+        let filtered = allTools;
+        if (userFilter !== 'all') {
+            filtered = filtered.filter(t => t.created_by_id === parseInt(userFilter));
+        }
+        if (siteFilter !== 'all') {
+            filtered = filtered.filter(t => t.current_site === siteFilter);
+        }
+
+        // Re-calculate Stats for the subset
+        const total = filtered.length;
+        const usable = filtered.filter((t: any) => t.status === 'usable').length;
+        const scrap = filtered.filter((t: any) => t.status === 'scrap').length;
+        
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(today.getDate() + 30);
+        
+        const expiringSoon = filtered.filter((t: any) => {
+            if (!t.expiry_date) return false;
+            const exp = new Date(t.expiry_date);
+            return exp > today && exp <= thirtyDaysFromNow;
+        }).length;
+        
+        const overdue = filtered.filter((t: any) => {
+            if (t.expiry_date) return new Date(t.expiry_date) < today;
+            return false;
+        }).length;
+
+        setStats({ total, usable, scrap, expiringSoon, overdue });
+        
+        // Update Chart Data (status distribution only for simplicity)
+        const statusCounts: Record<string, number> = {};
+        filtered.forEach((t: any) => {
+            const s = t.status || 'Unknown';
+            const formatted = s.charAt(0).toUpperCase() + s.slice(1);
+            statusCounts[formatted] = (statusCounts[formatted] || 0) + 1;
+        });
+        const statusChartData = Object.keys(statusCounts).map(s => ({
+            name: s,
+            value: statusCounts[s],
+            color: s === 'Usable' ? '#10B981' : s === 'Scrap' ? '#EF4444' : '#94A3B8'
+        }));
+        setStatusData(statusChartData);
+
+        // Update site distribution
+        const siteCounts: Record<string, number> = {};
+        filtered.forEach((t: any) => {
+            const site = t.current_site || 'Store';
+            siteCounts[site] = (siteCounts[site] || 0) + 1;
+        });
+        setSiteData(Object.entries(siteCounts).map(([name, value]) => ({ name, value })));
+
+    }, [userFilter, siteFilter, allTools]);
 
     const handleExportExcel = async () => {
         try {
@@ -493,7 +564,36 @@ const Dashboard = () => {
                     <p className="text-gray-500">Overview of tool inventory and status</p>
                 </div>
                 <div className="flex gap-2">
-
+                    {user?.role === 'admin' && (
+                        <>
+                            <div className="w-[180px]">
+                                <Select value={userFilter} onValueChange={setUserFilter}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Filter Creator" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Creators</SelectItem>
+                                        {allUsers.map(u => (
+                                            <SelectItem key={u.id} value={u.id.toString()}>{u.full_name || u.username}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="w-[180px]">
+                                <Select value={siteFilter} onValueChange={setSiteFilter}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Filter Store" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Stores</SelectItem>
+                                        {allSites.map(site => (
+                                            <SelectItem key={site} value={site}>{site}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </>
+                    )}
                     <Button variant="outline" onClick={handleExportPDF}>
                         <FileText className="w-4 h-4 mr-2 text-red-600" /> PDF
                     </Button>
