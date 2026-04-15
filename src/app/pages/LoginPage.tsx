@@ -31,7 +31,7 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
       handleWorkerAccess();
     } else {
       setSelectedRole(role);
-      if (role === 'store' || role === 'inspector') {
+      if (role === 'store' || role === 'inspector' || role === 'data_entry') {
         setUsername(''); // Do not auto-fill for store and inspector
       } else {
         setUsername(role); // Auto-fill username based on role for simplicity in this flow
@@ -341,7 +341,7 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                   </div>
                 )}
 
-                {(selectedRole === 'store' || selectedRole === 'inspector') && (
+                {(selectedRole === 'store' || selectedRole === 'inspector' || selectedRole === 'data_entry') && (
                   <div className="space-y-2">
                     <Label htmlFor="username" className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">User ID / Mail ID</Label>
                     <div className="relative">
@@ -355,7 +355,7 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         className="h-12 w-full pl-10 pr-3 rounded-xl border-white/10 bg-black/40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm shadow-inner transition-all text-white placeholder:text-neutral-600"
-                        autoFocus={selectedRole === 'store' || selectedRole === 'inspector'}
+                        autoFocus={selectedRole === 'store' || selectedRole === 'inspector' || selectedRole === 'data_entry'}
                       />
                     </div>
                   </div>

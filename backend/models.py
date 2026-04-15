@@ -60,6 +60,7 @@ class ToolBase(SQLModel):
     expiry_date: Optional[datetime] = None
     debit_to: Optional[str] = None
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Tool(ToolBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
