@@ -75,72 +75,90 @@ function App() {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
 
+  // Not logged in — show login page (ViewTool is public)
+  if (!user) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/view-tool/:qrCode" element={<ViewTool />} />
+          <Route path="*" element={<LoginPage onLogin={handleLogin} />} />
+        </Routes>
+        <Toaster />
+      </BrowserRouter>
+    );
+  }
+
+  // Logged in — render all routes in a FLAT top-level Routes inside Layout
+  // This avoids the React Router v6 descendant-route path matching bug
+  // where nested <Routes> inside <Route path="/*"> matches paths relative
+  // to the parent, causing absolute paths like /tool-master to never match.
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Public Route - Accessible without login */}
-        <Route path="/view-tool/:qrCode" element={<ViewTool />} />
+      <Layout user={user} onLogout={handleLogout}>
+        <Routes>
+          {/* Public: QR view accessible when logged in too */}
+          <Route path="/view-tool/:qrCode" element={<ViewTool />} />
 
-        {/* Protected Routes - Requiring Login */}
-        <Route
-          path="*"
-          element={
-            !user ? (
-              <LoginPage onLogin={handleLogin} />
-            ) : (
-              <Layout user={user} onLogout={handleLogout}>
-                <Routes>
-                  {user.role === "admin" && (
-                    <>
-                      <Route path="/" element={<Navigate to="/tool-master" replace />} />
-                      <Route path="/tool-master" element={<ToolMaster user={user} />} />
-                      <Route path="/dashboard" element={<Dashboard user={user} />} />
-                      <Route path="/reports" element={<Reports />} />
-                      <Route path="/alerts" element={<Alerts />} />
-                      <Route path="/users" element={<UsersManagement />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                    </>
-                  )}
-                  {user.role === "store" && (
-                    <>
-                      <Route path="/" element={<Navigate to="/store-view" replace />} />
-                      <Route path="/store-view" element={<StoreView />} />
-                    </>
-                  )}
-                  {user.role === "inspector" && (
-                    <>
-                      <Route path="/" element={<Navigate to="/inspector" replace />} />
-                      <Route path="/inspector" element={<InspectorView />} />
-                    </>
-                  )}
-                  {user.role === "management" && (
-                    <>
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<Dashboard user={user} />} />
-                      <Route path="/reports" element={<Reports />} />
-                      <Route path="/alerts" element={<Alerts />} />
-                    </>
-                  )}
-                  {user.role === "worker" && (
-                    <>
-                      <Route path="/" element={<Navigate to="/worker" replace />} />
-                      <Route path="/worker" element={<WorkerView />} />
-                      <Route path="/split-tool" element={<SplitToolMatching />} />
-                    </>
-                  )}
-                    {user.role === "data_entry" && (
-                      <>
-                        <Route path="/" element={<Navigate to="/tool-master" replace />} />
-                        <Route path="/tool-master" element={<ToolMaster user={user} />} />
-                      </>
-                    )}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </Layout>
-            )
-          }
-        />
-      </Routes>
+          {/* ── Admin ── */}
+          {user.role === "admin" && (
+            <>
+              <Route path="/" element={<Navigate to="/tool-master" replace />} />
+              <Route path="/tool-master" element={<ToolMaster user={user} />} />
+              <Route path="/dashboard" element={<Dashboard user={user} />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/alerts" element={<Alerts />} />
+              <Route path="/users" element={<UsersManagement />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </>
+          )}
+
+          {/* ── Store ── */}
+          {user.role === "store" && (
+            <>
+              <Route path="/" element={<Navigate to="/store-view" replace />} />
+              <Route path="/store-view" element={<StoreView />} />
+            </>
+          )}
+
+          {/* ── Inspector ── */}
+          {user.role === "inspector" && (
+            <>
+              <Route path="/" element={<Navigate to="/inspector" replace />} />
+              <Route path="/inspector" element={<InspectorView />} />
+            </>
+          )}
+
+          {/* ── Management ── */}
+          {user.role === "management" && (
+            <>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard user={user} />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/alerts" element={<Alerts />} />
+            </>
+          )}
+
+          {/* ── Worker ── */}
+          {user.role === "worker" && (
+            <>
+              <Route path="/" element={<Navigate to="/worker" replace />} />
+              <Route path="/worker" element={<WorkerView />} />
+              <Route path="/split-tool" element={<SplitToolMatching />} />
+            </>
+          )}
+
+          {/* ── Data Entry ── */}
+          {user.role === "data_entry" && (
+            <>
+              <Route path="/" element={<Navigate to="/tool-master" replace />} />
+              <Route path="/tool-master" element={<ToolMaster user={user} />} />
+            </>
+          )}
+
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
       <Toaster />
     </BrowserRouter>
   );

@@ -1,7 +1,5 @@
 from sqlmodel import create_engine, Session, SQLModel
 
-from sqlmodel import create_engine, Session, SQLModel
-
 # DATABASE CONNECTION STRING
 # XAMPP Default: user='root', password='' (empty)
 DATABASE_URL = "mysql+pymysql://root:@localhost:3306/qr_tools_db"

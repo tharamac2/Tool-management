@@ -69,6 +69,20 @@ def create_user(user: UserCreate, session: Session = Depends(get_session)): # Re
     
     return db_user
 
+@router.get("/stores")
+def get_stores(session: Session = Depends(get_session)):
+    """Return distinct site names from all Store Manager users."""
+    statement = select(User.site).where(User.role == "store").where(User.site != None).where(User.site != "")
+    results = session.exec(statement).all()
+    # Deduplicate while preserving order
+    seen = set()
+    stores = []
+    for site in results:
+        if site and site not in seen:
+            seen.add(site)
+            stores.append(site)
+    return {"stores": stores}
+
 @router.get("/", response_model=List[UserRead])
 def read_users(offset: int = 0, limit: int = 100, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
     users = session.exec(select(User).offset(offset).limit(limit)).all()

@@ -27,6 +27,16 @@ import api from '../services/api';
 
 const UsersManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [storeLocations, setStoreLocations] = useState<string[]>([]);
+
+  const fetchStores = async () => {
+    try {
+      const res = await api.get('/users/stores');
+      setStoreLocations(res.data.stores || []);
+    } catch (err) {
+      console.error('Failed to fetch stores', err);
+    }
+  };
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -36,11 +46,11 @@ const UsersManagement = () => {
           id: u.id.toString(),
           name: u.full_name || u.username,
           email: u.email,
-          phone: u.phone || 'N/A', // Backend might not have this yet
+          phone: u.phone || 'N/A',
           role: u.role,
           site: u.site || 'N/A',
           status: u.status,
-          lastLogin: new Date().toISOString() // Placeholder
+          lastLogin: new Date().toISOString()
         }));
         setUsers(fetchedUsers);
       } catch (error) {
@@ -49,6 +59,7 @@ const UsersManagement = () => {
       }
     };
     fetchUsers();
+    fetchStores();
   }, []);
 
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -64,8 +75,31 @@ const UsersManagement = () => {
     site: ''
   });
 
+  // --- Validation helpers ---
+  const isValidEmail = (email: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  const isValidPhone = (phone: string) => {
+    if (!phone.trim()) return true; // phone is optional
+    // Accepts: 10-digit numbers, optionally prefixed with +91, +1, etc.
+    return /^(\+?\d{1,4}[\s-]?)?\d{10}$/.test(phone.trim().replace(/[\s\-().]/g, ''));
+  };
+
+  // Add-user form errors
+  const [addErrors, setAddErrors] = useState<{ email?: string; phone?: string }>({});
+  // Edit-user form errors
+  const [editErrors, setEditErrors] = useState<{ email?: string; phone?: string }>({});
+
   const handleInputChange = (field: string, value: string) => {
-    setNewUser(prev => ({ ...prev, [field]: value }));
+    setNewUser(prev => {
+      const updated = { ...prev, [field]: value };
+      // When role changes, reset site so user must re-pick
+      if (field === 'role') updated.site = '';
+      return updated;
+    });
+    if (field === 'email' || field === 'phone') {
+      setAddErrors(prev => ({ ...prev, [field]: undefined }));
+    }
   };
 
   const handleAddUser = async () => {
@@ -81,22 +115,17 @@ const UsersManagement = () => {
         toast.error(`Please fill in: ${missingFields.join(', ')}`);
         return;
       }
-      // ...
-      // ...
-      <div className="space-y-2">
-        <Label htmlFor="add-role">Role <span className="text-red-600">*</span></Label>
-        <Select value={newUser.role} onValueChange={(val) => handleInputChange('role', val)} required>
-          <SelectTrigger id="add-role">
-            <SelectValue placeholder="Select role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="inspector">Inspector</SelectItem>
-            <SelectItem value="store">Store Manager</SelectItem>
-            <SelectItem value="worker">Worker</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+
+      // Field-level format validation
+      const newAddErrors: { email?: string; phone?: string } = {};
+      if (!isValidEmail(newUser.email))
+        newAddErrors.email = 'Please enter a valid email address (e.g. user@company.com).';
+      if (newUser.phone && !isValidPhone(newUser.phone))
+        newAddErrors.phone = 'Enter a valid 10-digit mobile number (optionally with country code).';
+      if (Object.keys(newAddErrors).length > 0) {
+        setAddErrors(newAddErrors);
+        return;
+      }
 
       const payload = {
         username: newUser.email, // Using email as username
@@ -127,6 +156,11 @@ const UsersManagement = () => {
 
       toast.success('User added successfully');
       setIsAddUserOpen(false);
+
+      // If a Store Manager was added, refresh store list so the new location appears in the dropdown
+      if (newUser.role === 'store') {
+        fetchStores();
+      }
 
       // Reset form
       setNewUser({
@@ -176,6 +210,17 @@ const UsersManagement = () => {
   const handleUpdateUser = async () => {
     try {
       if (!editingUserId) return;
+
+      // Field-level format validation for edit form
+      const newEditErrors: { email?: string; phone?: string } = {};
+      if (editFormData.email && !isValidEmail(editFormData.email))
+        newEditErrors.email = 'Please enter a valid email address (e.g. user@company.com).';
+      if (editFormData.phone && !isValidPhone(editFormData.phone))
+        newEditErrors.phone = 'Enter a valid 10-digit mobile number (optionally with country code).';
+      if (Object.keys(newEditErrors).length > 0) {
+        setEditErrors(newEditErrors);
+        return;
+      }
 
       const payload: any = {
         full_name: editFormData.name,
@@ -295,18 +340,33 @@ const UsersManagement = () => {
                   placeholder="user@company.com"
                   value={newUser.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
+                  className={addErrors.email ? 'border-red-500 focus-visible:ring-red-500' : ''}
                   required
                 />
+                {addErrors.email && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <Mail className="w-3 h-3" />{addErrors.email}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-phone">Phone Number</Label>
                 <Input
                   id="add-phone"
                   type="tel"
-                  placeholder="+1234567890"
+                  placeholder="e.g. 9876543210 or +91 9876543210"
                   value={newUser.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('phone', e.target.value);
+                    setAddErrors(prev => ({ ...prev, phone: undefined }));
+                  }}
+                  className={addErrors.phone ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 />
+                {addErrors.phone && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <Phone className="w-3 h-3" />{addErrors.phone}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-password">Password <span className="text-red-600">*</span></Label>
@@ -348,16 +408,48 @@ const UsersManagement = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-site">Site Location <span className="text-red-600">*</span></Label>
-                <Input
-                  id="add-site"
-                  placeholder="Enter site location"
-                  value={newUser.site}
-                  onChange={(e) => handleInputChange('site', e.target.value)}
-                  required
-                />
-              </div>
+
+              {/* Smart Site Location Field */}
+              {newUser.role === 'store' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="add-site">
+                    New Store Location <span className="text-red-600">*</span>
+                  </Label>
+                  <Input
+                    id="add-site"
+                    placeholder="Enter new store / location name"
+                    value={newUser.site}
+                    onChange={(e) => handleInputChange('site', e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-gray-500">This will create a new store and add it to the location list.</p>
+                </div>
+              ) : newUser.role && ['worker', 'inspector', 'data_entry'].includes(newUser.role) ? (
+                <div className="space-y-2">
+                  <Label htmlFor="add-site">
+                    Assign Store Location <span className="text-red-600">*</span>
+                  </Label>
+                  {storeLocations.length === 0 ? (
+                    <p className="text-sm text-amber-600 border border-amber-200 bg-amber-50 rounded-md px-3 py-2">
+                      ⚠️ No stores created yet. Please add a Store Manager first to create a location.
+                    </p>
+                  ) : (
+                    <Select
+                      value={newUser.site}
+                      onValueChange={(val) => handleInputChange('site', val)}
+                    >
+                      <SelectTrigger id="add-site">
+                        <SelectValue placeholder="Select a store location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storeLocations.map((store) => (
+                          <SelectItem key={store} value={store}>{store}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              ) : null}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddUserOpen(false)}>
@@ -389,16 +481,35 @@ const UsersManagement = () => {
                 <Input
                   type="email"
                   value={editFormData.email}
-                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  onChange={(e) => {
+                    setEditFormData({ ...editFormData, email: e.target.value });
+                    setEditErrors(prev => ({ ...prev, email: undefined }));
+                  }}
+                  className={editErrors.email ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 />
+                {editErrors.email && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <Mail className="w-3 h-3" />{editErrors.email}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>
                 <Input
                   type="tel"
+                  placeholder="e.g. 9876543210 or +91 9876543210"
                   value={editFormData.phone}
-                  onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                  onChange={(e) => {
+                    setEditFormData({ ...editFormData, phone: e.target.value });
+                    setEditErrors(prev => ({ ...prev, phone: undefined }));
+                  }}
+                  className={editErrors.phone ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 />
+                {editErrors.phone && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <Phone className="w-3 h-3" />{editErrors.phone}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Role</Label>
@@ -419,11 +530,34 @@ const UsersManagement = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Site</Label>
-                <Input
-                  value={editFormData.site}
-                  onChange={(e) => setEditFormData({ ...editFormData, site: e.target.value })}
-                />
+                <Label>Site Location</Label>
+                {editFormData.role === 'store' ? (
+                  <Input
+                    placeholder="Store / location name"
+                    value={editFormData.site}
+                    onChange={(e) => setEditFormData({ ...editFormData, site: e.target.value })}
+                  />
+                ) : storeLocations.length > 0 ? (
+                  <Select
+                    value={editFormData.site}
+                    onValueChange={(val) => setEditFormData({ ...editFormData, site: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a store location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {storeLocations.map((store) => (
+                        <SelectItem key={store} value={store}>{store}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="No stores available — type manually"
+                    value={editFormData.site}
+                    onChange={(e) => setEditFormData({ ...editFormData, site: e.target.value })}
+                  />
+                )}
               </div>
               <div className="space-y-2">
                 <Label>New Password (Optional)</Label>

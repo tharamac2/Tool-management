@@ -12,6 +12,7 @@ import {
   Shield,
   Database,
   Mail,
+  Phone,
   Save,
   Globe
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import api from '../services/api';
 const SettingsPage = () => {
   const [companyName, setCompanyName] = useState('Industrial Tools Co.');
   const [companyEmail, setCompanyEmail] = useState('admin@industrialtools.com');
+  const [companyPhone, setCompanyPhone] = useState('');
   const [notifications, setNotifications] = useState({
     email: true,
     push: true,
@@ -28,7 +30,28 @@ const SettingsPage = () => {
     inspection: true,
   });
 
+  // --- Validation helpers ---
+  const isValidEmail = (email: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  const isValidPhone = (phone: string) => {
+    if (!phone.trim()) return true; // phone is optional
+    return /^(\+?\d{1,4}[\s-]?)?\d{10}$/.test(phone.trim().replace(/[\s\-().]/g, ''));
+  };
+
+  const [settingsErrors, setSettingsErrors] = useState<{ email?: string; phone?: string }>({});
+
   const handleSaveSettings = () => {
+    const errors: { email?: string; phone?: string } = {};
+    if (!isValidEmail(companyEmail))
+      errors.email = 'Please enter a valid email address (e.g. admin@company.com).';
+    if (!isValidPhone(companyPhone))
+      errors.phone = 'Enter a valid 10-digit phone number (optionally with country code).';
+    if (Object.keys(errors).length > 0) {
+      setSettingsErrors(errors);
+      return;
+    }
+    setSettingsErrors({});
     toast.success('Settings saved successfully');
   };
 
@@ -73,9 +96,18 @@ const SettingsPage = () => {
                 <Input
                   type="email"
                   value={companyEmail}
-                  onChange={(e) => setCompanyEmail(e.target.value)}
+                  onChange={(e) => {
+                    setCompanyEmail(e.target.value);
+                    setSettingsErrors(prev => ({ ...prev, email: undefined }));
+                  }}
+                  className={settingsErrors.email ? 'border-red-500 focus-visible:ring-red-500' : ''}
                   required
                 />
+                {settingsErrors.email && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <Mail className="w-3 h-3" />{settingsErrors.email}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Address</Label>
@@ -83,7 +115,21 @@ const SettingsPage = () => {
               </div>
               <div className="space-y-2">
                 <Label>Phone Number</Label>
-                <Input placeholder="+1 (555) 123-4567" />
+                <Input
+                  type="tel"
+                  placeholder="e.g. 9876543210 or +91 9876543210"
+                  value={companyPhone}
+                  onChange={(e) => {
+                    setCompanyPhone(e.target.value);
+                    setSettingsErrors(prev => ({ ...prev, phone: undefined }));
+                  }}
+                  className={settingsErrors.phone ? 'border-red-500 focus-visible:ring-red-500' : ''}
+                />
+                {settingsErrors.phone && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <Phone className="w-3 h-3" />{settingsErrors.phone}
+                  </p>
+                )}
               </div>
               <Separator />
               <Button className="bg-[#1E3A8A]" onClick={handleSaveSettings}>

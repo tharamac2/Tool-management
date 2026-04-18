@@ -99,12 +99,12 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
 
   const handleLogin = async () => {
     try {
-      const formData = new FormData();
+      const formData = new URLSearchParams();
       formData.append('username', username);
       formData.append('password', password);
 
       const response = await api.post('/users/token', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
       const { access_token, role } = response.data;
@@ -373,7 +373,7 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                       placeholder="Enter password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                      onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                       className="h-12 w-full pl-10 pr-10 rounded-xl border-white/10 bg-black/40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm shadow-inner transition-all text-white placeholder:text-neutral-600"
                       autoFocus={selectedRole !== 'store' && selectedRole !== 'inspector'}
                     />

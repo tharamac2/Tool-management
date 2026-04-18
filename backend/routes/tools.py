@@ -17,15 +17,8 @@ def create_tool(tool: ToolCreate, session: Session = Depends(get_session), curre
         if not current_user.site:
             raise HTTPException(status_code=403, detail="No site assigned to this Data Entry user.")
         
-        # Enforce site
+        # Enforce site - data entry users can only add tools to their assigned site
         db_tool.current_site = current_user.site
-        
-        # Validate site exists in DB
-        # Rule: Only allow if store already exists in DB
-        site_exists = session.exec(select(Tool).where(Tool.current_site == current_user.site)).first()
-        if not site_exists:
-            raise HTTPException(status_code=400, detail="Invalid Store: Assigned store does not exist in system records.")
-        
 
     session.add(db_tool)
     session.commit()
@@ -48,8 +41,11 @@ def create_tool(tool: ToolCreate, session: Session = Depends(get_session), curre
 
 @router.get("/sites/", response_model=List[str])
 def read_sites(session: Session = Depends(get_session)):
-    query = select(Tool.current_site).distinct().where(Tool.current_site != None)
-    return session.exec(query).all()
+    query = select(Tool.current_site).distinct().where(
+        Tool.current_site != None,
+        Tool.current_site != ""
+    )
+    return [s for s in session.exec(query).all() if s and s.strip()]
 
 @router.get("/", response_model=List[ToolRead])
 def read_tools(

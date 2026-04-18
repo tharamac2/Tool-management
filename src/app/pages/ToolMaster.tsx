@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Separator } from '../components/ui/separator';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Download, Printer, Save, Edit, Search, FileDown, History, UploadCloud, X } from 'lucide-react';
+import { Download, Printer, Save, Edit, Search, FileDown, History, UploadCloud, X, Activity } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import {
   Dialog,
@@ -164,7 +164,10 @@ const ToolMaster = ({ user }: { user?: User }) => {
 
   useEffect(() => {
     fetchTools();
-    api.get('/tools/sites/').then(res => setAllSites(res.data)).catch(err => console.error(err));
+    // Fetch admin-created store locations from User Management
+    api.get('/users/stores')
+      .then(res => setAllSites((res.data.stores as string[]) || []))
+      .catch(err => console.error('Failed to fetch store locations', err));
     if (user?.role === 'admin') {
       api.get('/users/').then(res => setAllUsers(res.data)).catch(err => console.error(err));
     }
@@ -543,6 +546,7 @@ const ToolMaster = ({ user }: { user?: User }) => {
       expiryDate: tool.expiry_date ? new Date(tool.expiry_date) : undefined,
       jobCode: tool.job_code || '',
       jobDescription: tool.job_description || '',
+      toolType: tool.tool_type || 'Erection Tools',
     });
     setActiveTab('new'); // Switch to Edit Mode (Form)
     setIsToolSaved(true);
@@ -587,7 +591,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
       supplierCode: '',
       testCertificate: '',
       expiryDate: undefined,
+      toolType: 'Erection Tools',
     }));
+    setEditingToolId(null);
   };
 
 
@@ -909,28 +915,24 @@ const ToolMaster = ({ user }: { user?: User }) => {
                           <Activity className="w-4 h-4 text-blue-500" />
                           {user.site || 'No Site Assigned'}
                         </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <Select
-                            value={toolData.currentSite}
-                            onValueChange={value => handleInputChange('currentSite', value)}
-                          >
-                            <SelectTrigger className={`flex-1 ${errors.currentSite ? 'border-red-500' : ''}`}>
-                              <SelectValue placeholder="Select Store / Site" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {allSites.map(site => (
-                                <SelectItem key={site} value={site}>{site}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            placeholder="Or Enter New Site"
-                            className="w-[150px]"
-                            value={toolData.currentSite}
-                            onChange={e => handleInputChange('currentSite', e.target.value)}
-                          />
+                      ) : allSites.length === 0 ? (
+                        <div className="text-sm text-amber-600 border border-amber-200 bg-amber-50 rounded-md px-3 py-2">
+                          ⚠️ No stores created yet. Please add a Store Manager in User Management first.
                         </div>
+                      ) : (
+                        <Select
+                          value={toolData.currentSite}
+                          onValueChange={value => handleInputChange('currentSite', value)}
+                        >
+                          <SelectTrigger className={errors.currentSite ? 'border-red-500' : ''}>
+                            <SelectValue placeholder="Select Store / Site" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allSites.map(site => (
+                              <SelectItem key={site} value={site}>{site}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       )}
                     </div>
                   </div>
