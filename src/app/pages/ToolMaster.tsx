@@ -179,6 +179,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
     capacity: '',
     safeWorkingLoad: '',
     toolType: 'Erection Tools', // Default
+    metalType: '',
+    toolVariant: '',
+    itemCode: '',
     purchaserName: '',
     purchaserContact: '',
     supplierCode: '',
@@ -280,10 +283,16 @@ const ToolMaster = ({ user }: { user?: User }) => {
 
   // Auto-generate Tool ID / QR Code based on fields
   useEffect(() => {
-    if (!editingToolId) { // Only auto-generate for new tools
-      const namePart = toolData.description ? toolData.description.substring(0, 2).toUpperCase().replace(/[^A-Z]/g, 'X') : 'XX';
+    if (!editingToolId && !isToolSaved) { // Only auto-generate for new tools that haven't been saved yet
+      const namePart = toolData.description 
+        ? toolData.description.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase().replace(/[^A-Z]/g, 'X').padEnd(2, 'X')
+        : '';
+        
+      const metalPart = toolData.metalType ? toolData.metalType.trim().substring(0, 1).toUpperCase() : '';
+      const variantPart = toolData.toolVariant ? toolData.toolVariant.trim().toUpperCase() : '';
+      const capacityPart = toolData.capacity ? toolData.capacity.replace(/[^0-9]/g, '') : '';
 
-      let datePart = '0000';
+      let datePart = '';
       if (toolData.dateOfSupply) {
         const date = new Date(toolData.dateOfSupply);
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -291,13 +300,26 @@ const ToolMaster = ({ user }: { user?: User }) => {
         datePart = `${month}${year}`;
       }
 
-      const supplierPart = toolData.purchaserName ? toolData.purchaserName.substring(0, 2).toUpperCase().replace(/[^A-Z]/g, 'X') : 'XX';
-      const codePart = toolData.supplierCode ? toolData.supplierCode.padEnd(3, '0').substring(0, 3).toUpperCase() : '000'; // Ensure 3 chars
+      const supplierPart = toolData.purchaserName 
+        ? toolData.purchaserName.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase().replace(/[^A-Z]/g, 'X').padEnd(2, 'X')
+        : '';
 
-      const generatedId = `${namePart}${datePart}${supplierPart}${codePart}`;
+      const maxId = savedTools.length > 0 ? Math.max(...savedTools.map(t => t.id)) : 0;
+      const serialPart = (maxId + 1).toString().padStart(4, '0');
+
+      const generatedId = `${namePart}${metalPart}${variantPart}${capacityPart}${datePart}${supplierPart}${serialPart}`;
       setQrCode(generatedId);
     }
-  }, [toolData.description, toolData.dateOfSupply, toolData.purchaserName, toolData.supplierCode]);
+  }, [
+    editingToolId,
+    toolData.description,
+    toolData.metalType,
+    toolData.toolVariant,
+    toolData.capacity,
+    toolData.dateOfSupply,
+    toolData.purchaserName,
+    savedTools
+  ]);
 
   const validateForm = () => {
     const newErrors: Record<string, boolean> = {};
@@ -305,6 +327,7 @@ const ToolMaster = ({ user }: { user?: User }) => {
 
     const requiredFields = [
       'description', 'make', 'capacity', 'safeWorkingLoad',
+      'metalType', 'toolVariant',
       'purchaserName', 'purchaserContact', 'supplierCode',
       'jobCode', 'jobDescription'
     ];
@@ -343,6 +366,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
 
       const payload = {
         ...toolData,
+        metal_type: toolData.metalType,
+        tool_variant: toolData.toolVariant,
+        item_code: toolData.itemCode || null,
         purchaser_name: toolData.purchaserName,
         purchaser_contact: toolData.purchaserContact,
         supplier_code: toolData.supplierCode,
@@ -487,6 +513,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
         jobCode: tool.job_code || '',
         jobDescription: tool.job_description || '',
         toolType: tool.tool_type || 'General',
+        metalType: tool.metal_type || '',
+        toolVariant: tool.tool_variant || '',
+        itemCode: tool.item_code || '',
       });
       setIsToolSaved(true);
       toast.success("Tool details loaded!");
@@ -547,6 +576,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
       jobCode: tool.job_code || '',
       jobDescription: tool.job_description || '',
       toolType: tool.tool_type || 'Erection Tools',
+      metalType: tool.metal_type || '',
+      toolVariant: tool.tool_variant || '',
+      itemCode: tool.item_code || '',
     });
     setActiveTab('new'); // Switch to Edit Mode (Form)
     setIsToolSaved(true);
@@ -576,6 +608,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
       make: new Date().getFullYear().toString(),
       capacity: '',
       safeWorkingLoad: '',
+      metalType: '',
+      toolVariant: '',
+      itemCode: '',
       // Reset other fields as needed, or keep previous values? better reset.
       purchaserName: '',
       purchaserContact: '',
@@ -760,11 +795,14 @@ const ToolMaster = ({ user }: { user?: User }) => {
                           <SelectValue placeholder="Select Capacity" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[200px]">
-                          {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
-                            <SelectItem key={num} value={`${num} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
-                              {num} {num === 1 ? 'Tonne' : 'Tonnes'}
-                            </SelectItem>
-                          ))}
+                          {Array.from({ length: 100 }, (_, i) => i + 1).map((num) => {
+                            const paddedNum = num.toString().padStart(3, '0');
+                            return (
+                              <SelectItem key={num} value={`${paddedNum} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
+                                {paddedNum} {num === 1 ? 'Tonne' : 'Tonnes'}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -778,13 +816,47 @@ const ToolMaster = ({ user }: { user?: User }) => {
                           <SelectValue placeholder="Select SWL" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[200px]">
-                          {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
-                            <SelectItem key={num} value={`${num} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
-                              {num} {num === 1 ? 'Tonne' : 'Tonnes'}
-                            </SelectItem>
-                          ))}
+                          {Array.from({ length: 100 }, (_, i) => i + 1).map((num) => {
+                            const paddedNum = num.toString().padStart(3, '0');
+                            return (
+                              <SelectItem key={num} value={`${paddedNum} ${num === 1 ? 'Tonne' : 'Tonnes'}`}>
+                                {paddedNum} {num === 1 ? 'Tonne' : 'Tonnes'}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="metalType">Metal Type <span className="text-red-600">*</span></Label>
+                      <Input
+                        id="metalType"
+                        placeholder="Enter Metal Type"
+                        value={toolData.metalType}
+                        onChange={(e) => handleInputChange('metalType', e.target.value)}
+                        className={errors.metalType ? 'border-red-500' : ''}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="toolVariant">Tool Variant <span className="text-red-600">*</span></Label>
+                      <Input
+                        id="toolVariant"
+                        placeholder="Enter Tool Variant"
+                        value={toolData.toolVariant}
+                        onChange={(e) => handleInputChange('toolVariant', e.target.value)}
+                        className={errors.toolVariant ? 'border-red-500' : ''}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="itemCode">Item Code</Label>
+                      <Input
+                        id="itemCode"
+                        placeholder="Enter Item Code"
+                        value={toolData.itemCode}
+                        onChange={(e) => handleInputChange('itemCode', e.target.value)}
+                      />
                     </div>
                   </div>
                 </CardContent>
@@ -1008,7 +1080,7 @@ const ToolMaster = ({ user }: { user?: User }) => {
                     <div className="flex flex-col items-center space-y-4">
                       <div className="p-4 bg-white border-2 border-gray-200 rounded-lg" id="qr-code-wrapper">
                         <QRCodeCanvas
-                          value={`${baseUrl}/view-tool/${qrCode}`}
+                          value={`${window.location.origin}/view-tool/${qrCode}`}
                           size={200}
                           level={"H"}
                           includeMargin={true}
@@ -1034,8 +1106,11 @@ const ToolMaster = ({ user }: { user?: User }) => {
                     </div>
                   ) : (
                     <div className="text-center py-12">
-                      <p className="text-gray-400 mb-4">QR Code will be generated automatically after saving the tool details.</p>
-                      <Button disabled variant="outline">Auto-Generated on Save</Button>
+                      <p className="text-gray-400 mb-4">QR Code string preview:</p>
+                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-md font-mono text-lg font-bold text-gray-700 break-all mb-4">
+                        {qrCode || 'Fill details to generate'}
+                      </div>
+                      <p className="text-xs text-gray-400">The actual QR image will be generated automatically after saving.</p>
                     </div>
                   )}
                 </CardContent>

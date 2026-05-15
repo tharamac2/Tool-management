@@ -37,6 +37,9 @@ class ToolBase(SQLModel):
     capacity: str
     safe_working_load: str
     tool_type: str = Field(default="Erection Tools") # Erection Tools, Stringing Tools
+    metal_type: str
+    tool_variant: str
+    item_code: Optional[str] = None
     purchaser_name: Optional[str] = None
     purchaser_contact: Optional[str] = None
     supplier_code: Optional[str] = None # Added for custom ID generation
@@ -83,6 +86,9 @@ class ToolUpdate(SQLModel):
     capacity: Optional[str] = None
     safe_working_load: Optional[str] = None
     tool_type: Optional[str] = None
+    metal_type: Optional[str] = None
+    tool_variant: Optional[str] = None
+    item_code: Optional[str] = None
     current_site: Optional[str] = None
     status: Optional[str] = None
     subcontractor_name: Optional[str] = None
