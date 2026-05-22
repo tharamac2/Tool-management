@@ -25,15 +25,15 @@ def on_startup():
     create_db_and_tables()
 
 # Mount uploads directory to serve files
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-app.include_router(users.router)
-app.include_router(tools.router)
-app.include_router(inspections.router)
-app.include_router(alerts.router)
-app.include_router(upload.router)
-app.include_router(movements.router)
-app.include_router(export.router)
+app.include_router(users.router, prefix="/api")
+app.include_router(tools.router, prefix="/api")
+app.include_router(inspections.router, prefix="/api")
+app.include_router(alerts.router, prefix="/api")
+app.include_router(upload.router, prefix="/api")
+app.include_router(movements.router, prefix="/api")
+app.include_router(export.router, prefix="/api")
 
 @app.get("/system/ip")
 def get_local_ip():

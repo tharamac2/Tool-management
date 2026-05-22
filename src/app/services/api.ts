@@ -3,10 +3,10 @@ import axios from 'axios';
 const getBaseUrl = () => {
   // If running on localhost, use localhost API
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:8000';
+    return 'http://localhost:8000/api';
   }
   // If running on network IP, assume API is on the same IP at port 8000
-  return `http://${window.location.hostname}:8000`;
+  return `http://${window.location.hostname}:8000/api`;
 };
 
 const api = axios.create({

@@ -35,7 +35,7 @@ async def upload_certificate(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
         
     # Return URL (relative path)
-    return {"url": f"/uploads/{unique_filename}"}
+    return {"url": f"/api/uploads/{unique_filename}"}
 
 @router.post("/image")
 async def upload_image(file: UploadFile = File(...)):
@@ -54,7 +54,7 @@ async def upload_image(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
         
-    return {"url": f"/uploads/{unique_filename}"}
+    return {"url": f"/api/uploads/{unique_filename}"}
 
 def generate_qr_code(description, date_of_supply, purchaser_name, supplier_code, index):
     name_part = "XX"
