@@ -80,7 +80,6 @@ function App() {
     return (
       <BrowserRouter>
         <Routes>
-          <Route path="/view-tool/:qrCode" element={<ViewTool />} />
           <Route path="*" element={<LoginPage onLogin={handleLogin} />} />
         </Routes>
         <Toaster />

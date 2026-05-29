@@ -7,6 +7,9 @@ import re
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
+import qrcode
+import zipfile
+from PIL import Image, ImageDraw, ImageFont
 from sqlmodel import Session, select
 from ..database import get_session
 from ..models import Tool, User, Alert
@@ -56,13 +59,28 @@ async def upload_image(file: UploadFile = File(...)):
         
     return {"url": f"/api/uploads/{unique_filename}"}
 
-def generate_qr_code(description, date_of_supply, purchaser_name, supplier_code, index):
-    name_part = "XX"
+def generate_qr_code(description, metal_type, tool_variant, capacity, date_of_supply, purchaser_name, max_id, index):
+    name_part = ""
     if description:
-        val = re.sub(r'[^A-Z]', 'X', str(description).upper())
-        name_part = val[:2].ljust(2, 'X')
+        words = str(description).strip().split()[:2]
+        initials = "".join([w[0].upper() for w in words])
+        name_part = re.sub(r'[^A-Z]', 'X', initials).ljust(2, 'X')
 
-    date_part = "0000"
+    metal_part = ""
+    if metal_type:
+        metal_part = str(metal_type).strip()[0].upper()
+
+    variant_part = "000"
+    if tool_variant:
+        words = [w for w in str(tool_variant).strip().split() if w]
+        letters = "".join([w[0].upper() for w in words[:3]])
+        variant_part = letters.rjust(3, '0')
+
+    capacity_part = ""
+    if capacity:
+        capacity_part = re.sub(r'[^0-9]', '', str(capacity))
+
+    date_part = ""
     if date_of_supply:
         try:
             dt = pd.to_datetime(date_of_supply)
@@ -70,18 +88,15 @@ def generate_qr_code(description, date_of_supply, purchaser_name, supplier_code,
         except:
             pass
 
-    supplier_part = "XX"
+    supplier_part = ""
     if purchaser_name:
-        val = re.sub(r'[^A-Z]', 'X', str(purchaser_name).upper())
-        supplier_part = val[:2].ljust(2, 'X')
+        words = str(purchaser_name).strip().split()[:2]
+        initials = "".join([w[0].upper() for w in words])
+        supplier_part = re.sub(r'[^A-Z]', 'X', initials).ljust(2, 'X')
 
-    code_part = "000"
-    if supplier_code:
-        code_part = str(supplier_code).zfill(3)[:3].upper()
-    else:
-        code_part = str(index).zfill(3)[:3]
+    serial_part = str(max_id + 1 + index).zfill(4)
 
-    return f"{name_part}{date_part}{supplier_part}{code_part}"
+    return f"{name_part}{metal_part}{variant_part}{capacity_part}{date_part}{supplier_part}{serial_part}"
 
 @router.post("/tools", response_model=dict)
 async def upload_tools(
@@ -118,7 +133,17 @@ async def upload_tools(
             raise HTTPException(status_code=400, detail=f"Error reading PDF file: {str(e)}")
 
     df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(' ', '_')
-    required_cols = ['description', 'make', 'capacity', 'safe_working_load', 'purchaser_name']
+    # Handle common misspellings or alternative headers from the user's Excel sheet
+    df.rename(columns={
+        'tool_varient': 'tool_variant', 
+        'current_site': 'location'
+    }, inplace=True)
+    
+    required_cols = [
+        'description', 'make', 'capacity', 'safe_working_load', 'purchaser_name',
+        'supplier_code', 'date_of_supply', 'tool_type', 'metal_type', 'tool_variant',
+        'purchaser_contact', 'job_code', 'job_description', 'location'
+    ]
     
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
@@ -126,7 +151,13 @@ async def upload_tools(
 
     success_count = 0
     errors = []
-    existing_qrs = {t.qr_code for t in session.exec(select(Tool)).all()}
+    all_tools = session.exec(select(Tool)).all()
+    existing_qrs = {t.qr_code for t in all_tools}
+    max_id = max([t.id for t in all_tools]) if all_tools else 0
+    successfully_imported_tools = []
+    
+    qr_links = []
+    frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
 
     for index, row in df.iterrows():
         try:
@@ -146,7 +177,10 @@ async def upload_tools(
             else:
                 date_of_supply = datetime.now()
             
-            qr_code = generate_qr_code(description, date_of_supply, purchaser, supplier_code, index)
+            
+            metal_type_val = str(row.get('metal_type', 'Steel'))
+            tool_variant_val = str(row.get('tool_variant', 'Standard'))
+            qr_code = generate_qr_code(description, metal_type_val, tool_variant_val, capacity, date_of_supply, purchaser, max_id, index)
             
             original_qr = qr_code
             counter = 1
@@ -163,17 +197,22 @@ async def upload_tools(
                 except ValueError: 
                     expiry_date = datetime(date_of_supply.year + 3, date_of_supply.month, 28)
             
+            location = str(row.get('location', '')) if row.get('location') else None
+
             db_tool = Tool(
                 description=description,
                 make=make,
                 capacity=capacity,
                 safe_working_load=swl,
                 tool_type=str(row.get('tool_type', 'Erection Tools')),
+                metal_type=str(row.get('metal_type', 'Steel')),
+                tool_variant=str(row.get('tool_variant', 'Standard')),
                 purchaser_name=purchaser,
                 purchaser_contact=str(row.get('purchaser_contact', None)) if row.get('purchaser_contact') else None,
                 supplier_code=supplier_code,
                 job_code=str(row.get('job_code', None)) if row.get('job_code') else None,
                 job_description=str(row.get('job_description', None)) if row.get('job_description') else None,
+                current_site=location,
                 date_of_supply=date_of_supply,
                 expiry_date=expiry_date,
                 validity_period=3,
@@ -182,12 +221,56 @@ async def upload_tools(
                 inspection_result="usable"
             )
             session.add(db_tool)
+            successfully_imported_tools.append(db_tool)
+            qr_links.append(f"{frontend_url}/view-tool/{qr_code}")
             success_count += 1
         except Exception as e:
+            qr_links.append("")
             errors.append(f"Row {index+2}: {str(e)}")
 
+    download_url = None
+    excel_download_url = None
     if success_count > 0:
         session.commit()
+        
+        # Save updated excel file
+        if len(qr_links) == len(df):
+            df['qr_link'] = qr_links
+        
+        excel_filename = f"qrcodes_data_{uuid.uuid4().hex[:8]}.xlsx"
+        excel_filepath = os.path.join(UPLOAD_DIR, excel_filename)
+        df.to_excel(excel_filepath, index=False)
+        excel_download_url = f"/api/uploads/{excel_filename}"
+        
+        # Generate QR Codes ZIP
+        zip_filename = f"qrcodes_{uuid.uuid4().hex[:8]}.zip"
+        zip_filepath = os.path.join(UPLOAD_DIR, zip_filename)
+        
+        with zipfile.ZipFile(zip_filepath, 'w') as zipf:
+            for tool in successfully_imported_tools:
+                full_url = f"{frontend_url}/view-tool/{tool.qr_code}"
+                
+                qr = qrcode.make(full_url)
+                qr_pil = qr.get_image()
+                # Create a new image with space for text at bottom
+                new_img = Image.new('RGB', (qr.pixel_size, qr.pixel_size + 40), color='white')
+                new_img.paste(qr_pil, (0, 0))
+                draw = ImageDraw.Draw(new_img)
+                try:
+                    font = ImageFont.load_default()
+                except Exception:
+                    font = None
+                
+                text = tool.qr_code
+                # Very basic centering approximation for default font
+                text_x = qr.pixel_size // 2 - (len(text) * 3)
+                draw.text((max(0, text_x), qr.pixel_size + 10), text, fill="black", font=font)
+                
+                img_byte_arr = io.BytesIO()
+                new_img.save(img_byte_arr, format='PNG')
+                zipf.writestr(f"{tool.qr_code}.png", img_byte_arr.getvalue())
+        
+        download_url = f"/api/uploads/{zip_filename}"
         
         bulk_alert = Alert(
             type="new-tool",
@@ -202,5 +285,7 @@ async def upload_tools(
     return {
         "success": True,
         "message": f"Successfully imported {success_count} tools.",
-        "errors": errors
+        "errors": errors,
+        "download_url": download_url,
+        "excel_download_url": excel_download_url
     }

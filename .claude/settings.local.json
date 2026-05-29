@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python generate_user_guide.py)",
+      "Bash(python -c ':*)"
+    ]
+  }
+}

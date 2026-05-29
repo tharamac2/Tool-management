@@ -75,6 +75,7 @@ def seed_data():
                 make="Yale",
                 capacity="5 Tonnes",
                 safe_working_load="5000 kg",
+                metal_type="Steel",
                 qr_code="TOOL-SEED-001",
                 status="usable",
                 date_of_supply=datetime.now()

@@ -50,7 +50,7 @@ def read_sites(session: Session = Depends(get_session)):
 @router.get("/", response_model=List[ToolRead])
 def read_tools(
     offset: int = 0, 
-    limit: int = 100, 
+    limit: int = 10000000, 
     search: Optional[str] = None,
     site: Optional[str] = None,
     created_by: Optional[int] = None,

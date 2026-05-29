@@ -31,77 +31,22 @@ import {
 } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 
-const TOOLS_LIST = [
-  "Aerial Roller for Earthwire",
-  "Articulator Joints",
-  "Articulator Joints – 10T",
-  "Articulator Joints – 25T",
-  "Automatic Clamp for Earthwire – 7/3.66mm",
-  "Automatic Clamp for Zebra Conductor",
-  "Bull Dog Clamp – 18mm",
-  "Chain Pulley – 10T Capacity",
-  "Clipping Ladder",
-  "Comealong Clamp (Bolted) for Earthwire",
-  "Comealong Clamp (Bolted) for Zebra",
-  "Conductor Drum Lifting Jacks (Manual)",
-  "Conductor Drum Lifting Jacks (Manual) – 10T",
-  "Crowbar – 32mm",
-  "D-Shackles",
-  "D-Shackles – 5T Cap",
-  "D-Shackles – 6.5T Cap",
-  "D-Shackles – 8.5T Cap",
-  "D-Shackles – 9.5/10MT Cap",
-  "D-Shackles – 17MT Cap",
-  "Derrick Poles – 6m + 6m",
-  "Dieset for Earthwire",
-  "Dieset for Earthwire – Aluminium",
-  "Dieset for Earthwire – Steel",
-  "Dieset for Zebra Conductor – Aluminium",
-  "Double Ended Socks for Conductor",
-  "Double Sheave Pulley – 5T Cap",
-  "Double sleeve open Pulley",
-  "Dynamometer – 15T",
-  "Earthwire Socks",
-  "Equalizer Pulley",
-  "E/W Drum Lifting Jacks (Manual)",
-  "Four Sheave Pulley Block",
-  "Ground Rollers",
-  "Head Board Suitable for Seven Sheave Aerial Roller",
-  "Hydraulic Conductor Cutter",
-  "ISMC-400",
-  "Marking Roller",
-  "Midspan Joint Protector Sleeve",
-  "One End Open Socks with Eye for Conductor",
-  "Pilot Wire – 24mm",
-  "Pilot Wire – 24mm – 800m",
-  "Pilot Wire Bobbin",
-  "Pilot Wire Connector – 24mm",
-  "Pilot Wire Mounting Stand",
-  "Pilot Wire Safety Clamp",
-  "P.P. Rope – 22mm Dia",
-  "P.P. Rope – 22mm Dia – 220m",
-  "P.P. Rope – 24mm Dia",
-  "P.P. Rope – 24mm Dia – 220m",
-  "Sag Plate",
-  "Safety Clamp – 3 Bolted",
-  "Seven Sheave Aerial Roller – 660mm Dia Wheel (Nylon)",
-  "Single Sheave Pulley – 5T Cap",
-  "Single Sheave Pulley – 5T Cap – Open Type",
-  "Single Sheave Pulley – 5T Cap – Closed Type",
-  "Steel Wire Rope – 12mm (Fibre Coated)",
-  "Steel Wire Rope – 18mm (Fibre Coated)",
-  "Steel Wire Rope Slings – 18mm",
-  "Steel Wire Rope Slings – 18mm – 1m",
-  "Steel Wire Rope Slings – 18mm – 3m",
-  "Steel Wire Rope Slings – 18mm – 5m",
-  "Trifor – 5MT",
-  "Turn Buckles – 10T Cap",
-  "Turn Table E/W – 5 Ton Cap",
-  "Turn Table E/W – 10 Ton Cap",
-  "Walkie–Talkie",
-  "Winch Machine – 5T (With Mechanical Clamp)"
-];
+const TOOL_CODE_MAPPING: Record<string, string> = {
+  "SINGLE SHEAVE OPEN PULLY": "1SETM0004000000",
+  "SINGLE SHEAVE CLOSE PULLY": "1SETM0005000000",
+  "DOUBLE SHEAVE PULLEY": "1SETM003G000000",
+  "D SHACKLE 4.5T": "2T11M0GFO000000",
+  "D SHACKLE 6.5T": "2T11M0K39000000",
+  "D SHACKLE 9.5T": "2T11M04UG000000",
+  "D SHACKLE 8.5T": "2T11M063H000000",
+  "STEEL WIRE SLING 1M": "2T11M0IQX000000",
+  "STEEL WIRE SLING 2M": "2T11M0KNY000000",
+  "STEEL WIRE SLING 6M": "2T11M04BW000000",
+  "WIRE ROPE 4000M": "1SETM005E000000",
+  "DIRRECK POLE": "1SETM0002000000",
+};
 
+const TOOLS_LIST = Object.keys(TOOL_CODE_MAPPING);
 import { User } from '../App';
 
 const ToolMaster = ({ user }: { user?: User }) => {
@@ -217,6 +162,8 @@ const ToolMaster = ({ user }: { user?: User }) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [bulkZipUrl, setBulkZipUrl] = useState<string | null>(null);
+  const [bulkExcelUrl, setBulkExcelUrl] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -289,7 +236,9 @@ const ToolMaster = ({ user }: { user?: User }) => {
         : '';
         
       const metalPart = toolData.metalType ? toolData.metalType.trim().substring(0, 1).toUpperCase() : '';
-      const variantPart = toolData.toolVariant ? toolData.toolVariant.trim().toUpperCase() : '';
+      const variantPart = toolData.toolVariant 
+        ? toolData.toolVariant.trim().split(/\s+/).filter(w => w).slice(0, 3).map(w => w[0].toUpperCase()).join('').padStart(3, '0')
+        : '000';
       const capacityPart = toolData.capacity ? toolData.capacity.replace(/[^0-9]/g, '') : '';
 
       let datePart = '';
@@ -643,19 +592,38 @@ const ToolMaster = ({ user }: { user?: User }) => {
     setIsUploading(true);
     try {
       const response = await api.post("/upload/tools", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: { "Content-Type": undefined }
       });
       toast.success(response.data.message || "Bulk import successful");
       if (response.data.errors && response.data.errors.length > 0) {
         toast.warning(`Some rows failed: ${response.data.errors[0]}...`);
       }
+      if (response.data.download_url) {
+        setBulkZipUrl(response.data.download_url);
+      }
+      if (response.data.excel_download_url) {
+        setBulkExcelUrl(response.data.excel_download_url);
+      }
+      toast.success("Ready to download QR Codes and Excel file!");
       setIsImportModalOpen(false);
       setImportFile(null);
       fetchTools(); // Refresh inventory
       setActiveTab('saved'); // Switch to inventory to see new items
     } catch (error: any) {
       console.error("Bulk upload error", error);
-      toast.error(error.response?.data?.detail || "Bulk import failed. Please check file format.");
+      let errMsg = error.message || "Bulk import failed.";
+      if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          errMsg = error.response.data.detail.map((e: any) => e.msg).join(", ");
+        } else if (typeof error.response.data.detail === 'string') {
+          errMsg = error.response.data.detail;
+        } else {
+          errMsg = JSON.stringify(error.response.data.detail);
+        }
+      } else if (error.response?.status === 500) {
+        errMsg = "Server Error (500). The remote backend needs to be updated with the new code.";
+      }
+      toast.error(errMsg);
     } finally {
       setIsUploading(false);
     }
@@ -669,9 +637,37 @@ const ToolMaster = ({ user }: { user?: User }) => {
           <p className="text-gray-500 mt-1">Manage tool inventory, generate QR codes, and track assets.</p>
         </div>
         {user?.role === 'admin' && (
-          <Button onClick={() => setIsImportModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
-            <UploadCloud className="mr-2 h-4 w-4" /> Bulk Import
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 items-center">
+            <Button onClick={() => setIsImportModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+              <UploadCloud className="mr-2 h-4 w-4" /> Bulk Import
+            </Button>
+            <Button 
+              disabled={!bulkZipUrl} 
+              onClick={() => {
+                if (bulkZipUrl) {
+                  const backendUrl = api.defaults.baseURL?.replace('/api', '') || '';
+                  window.open(`${backendUrl}${bulkZipUrl}`, '_blank');
+                }
+              }}
+              variant="outline"
+              className="border-indigo-600 text-indigo-600 hover:bg-indigo-50"
+            >
+              Zip qr download
+            </Button>
+            <Button 
+              disabled={!bulkExcelUrl} 
+              onClick={() => {
+                if (bulkExcelUrl) {
+                  const backendUrl = api.defaults.baseURL?.replace('/api', '') || '';
+                  window.open(`${backendUrl}${bulkExcelUrl}`, '_blank');
+                }
+              }}
+              variant="outline"
+              className="border-green-600 text-green-600 hover:bg-green-50"
+            >
+              Excel file with qr link
+            </Button>
+          </div>
         )}
       </div>
 
@@ -754,7 +750,12 @@ const ToolMaster = ({ user }: { user?: User }) => {
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="description">Tool Name <span className="text-red-600">*</span></Label>
-                    <Select value={toolData.description} onValueChange={(value) => handleInputChange('description', value)} required>
+                    <Select value={toolData.description} onValueChange={(value) => {
+                      handleInputChange('description', value);
+                      if (TOOL_CODE_MAPPING[value]) {
+                        handleInputChange('itemCode', TOOL_CODE_MAPPING[value]);
+                      }
+                    }} required>
                       <SelectTrigger className={errors.description ? 'border-red-500' : ''}>
                         <SelectValue placeholder="Select tool Name" />
                       </SelectTrigger>
@@ -856,6 +857,8 @@ const ToolMaster = ({ user }: { user?: User }) => {
                         placeholder="Enter Item Code"
                         value={toolData.itemCode}
                         onChange={(e) => handleInputChange('itemCode', e.target.value)}
+                        readOnly
+                        className="bg-gray-100 cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -889,11 +892,10 @@ const ToolMaster = ({ user }: { user?: User }) => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="supplierCode">Supplier Code ({toolData.supplierCode ? toolData.supplierCode.padEnd(3, '0').substring(0, 3).toUpperCase() : 'XXX'}) <span className="text-red-600">*</span></Label>
+                    <Label htmlFor="supplierCode">Supplier Code <span className="text-red-600">*</span></Label>
                     <Input
                       id="supplierCode"
-                      placeholder="e.g. 001"
-                      maxLength={3}
+                      placeholder="Enter Supplier Code"
                       value={toolData.supplierCode}
                       onChange={(e) => handleInputChange('supplierCode', e.target.value)}
                       className={errors.supplierCode ? 'border-red-500' : ''}
@@ -1329,8 +1331,8 @@ const ToolMaster = ({ user }: { user?: User }) => {
             <div className="space-y-4">
               <div className="flex justify-between items-start gap-4">
                 <div>
-                  <h4 className="text-lg font-bold text-[#1E3A8A] flex items-center gap-2">
-                    {hoveredTool.description}
+                  <h4 className="text-lg font-bold text-[#1E3A8A] flex flex-col items-start gap-1.5">
+                    <span>{hoveredTool.description}</span>
                     <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">{hoveredTool.qr_code}</Badge>
                   </h4>
                   <p className="text-sm text-gray-500 mt-1">{hoveredTool.make} • {hoveredTool.capacity} • SWL {hoveredTool.safe_working_load}</p>
@@ -1374,13 +1376,13 @@ const ToolMaster = ({ user }: { user?: User }) => {
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm border-b py-4">
-                <div>
+                <div className="min-w-0">
                   <span className="text-gray-500 block text-xs">Job Code</span>
-                  <span className="font-medium">{hoveredTool.job_code || '-'}</span>
+                  <span className="font-medium block truncate">{hoveredTool.job_code || '-'}</span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-gray-500 block text-xs">Job Description</span>
-                  <span className="font-medium truncate" title={hoveredTool.job_description}>{hoveredTool.job_description || '-'}</span>
+                  <span className="font-medium block break-words" title={hoveredTool.job_description}>{hoveredTool.job_description || '-'}</span>
                 </div>
               </div>
 
