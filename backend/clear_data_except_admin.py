@@ -1,39 +1,33 @@
-from sqlmodel import Session, select, delete
+from sqlmodel import Session, select, SQLModel
 from backend.database import engine
 from backend.models import User, Tool, Inspection, Alert, MovementHistory
 
 def clear_data():
     print("Connecting to the database...")
     with Session(engine) as session:
-        # Delete dependent tables first
-        print("Deleting Alerts...")
-        session.exec(delete(Alert))
+        # 1. Backup all admin users
+        print("Backing up admin users...")
+        admins = session.exec(select(User).where(User.role == "admin")).all()
         
-        print("Deleting Inspections...")
-        session.exec(delete(Inspection))
-        
-        print("Deleting Movement Histories...")
-        session.exec(delete(MovementHistory))
-        
-        # Delete tools
-        print("Deleting Tools...")
-        session.exec(delete(Tool))
-        
-        # Delete non-admin users
-        print("Deleting non-admin users...")
-        statement = delete(User).where(User.role != "admin")
-        session.exec(statement)
-        
-        # Reset SQLite Auto-Increment Sequences
-        print("Resetting auto-increment sequences...")
-        from sqlalchemy import text
-        try:
-            session.exec(text("DELETE FROM sqlite_sequence WHERE name IN ('alert', 'inspection', 'movementhistory', 'tool')"))
-        except Exception as e:
-            pass
+        # Detach from session so we can re-add them to the new tables
+        for admin in admins:
+            session.expunge(admin)
+            
+    # 2. Drop and Recreate all tables (Guarantees auto-increment reset on ANY database: MySQL, Postgres, SQLite)
+    print("Dropping all tables to reset auto-increment counters...")
+    SQLModel.metadata.drop_all(engine)
+    
+    print("Recreating clean tables...")
+    SQLModel.metadata.create_all(engine)
+    
+    # 3. Restore admin users
+    with Session(engine) as session:
+        print(f"Restoring {len(admins)} admin user(s)...")
+        for admin in admins:
+            session.add(admin)
             
         session.commit()
-        print("Database cleared successfully. Only admin users remain.")
+        print("Database completely wiped and auto-increment reset successfully! Only admin users remain.")
 
 if __name__ == "__main__":
     clear_data()
