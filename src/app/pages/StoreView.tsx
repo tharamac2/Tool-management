@@ -87,7 +87,7 @@ const StoreView = () => {
         const site = userRes.data.site;
         if (site) {
           setStoreLocation(site);
-          const toolsRes = await api.get(`/tools/?site=${site}&limit=1000`);
+          const toolsRes = await api.get(`/tools/?site=${site}&limit=10000000`);
           setInventoryTools(toolsRes.data);
         } else {
           setStoreLocation('Store');

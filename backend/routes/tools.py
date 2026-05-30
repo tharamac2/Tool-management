@@ -66,7 +66,8 @@ def read_tools(
     if search:
         query = query.where(Tool.description.contains(search) | Tool.qr_code.contains(search))
     if site:
-        query = query.where(Tool.current_site == site)
+        from sqlalchemy import func
+        query = query.where(func.lower(func.trim(Tool.current_site)) == site.strip().lower())
     if created_by:
         query = query.where(Tool.created_by_id == created_by)
     

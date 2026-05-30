@@ -24,6 +24,14 @@ def clear_data():
         statement = delete(User).where(User.role != "admin")
         session.exec(statement)
         
+        # Reset SQLite Auto-Increment Sequences
+        print("Resetting auto-increment sequences...")
+        from sqlalchemy import text
+        try:
+            session.exec(text("DELETE FROM sqlite_sequence WHERE name IN ('alert', 'inspection', 'movementhistory', 'tool')"))
+        except Exception as e:
+            pass
+            
         session.commit()
         print("Database cleared successfully. Only admin users remain.")
 

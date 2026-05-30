@@ -197,7 +197,8 @@ async def upload_tools(
                 except ValueError: 
                     expiry_date = datetime(date_of_supply.year + 3, date_of_supply.month, 28)
             
-            location = str(row.get('location', '')) if row.get('location') else None
+            location_val = row.get('location')
+            location = str(location_val).strip() if pd.notna(location_val) and str(location_val).strip() else 'Store'
 
             db_tool = Tool(
                 description=description,
